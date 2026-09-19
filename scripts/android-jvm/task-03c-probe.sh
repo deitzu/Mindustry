@@ -48,7 +48,7 @@ fi
   echo "::error::SDL source directory is missing: $SDL_ROOT"
   exit 1
 }
-header_version="$(awk -F" |[()]" '/^#define SDL_MAJOR_VERSION/{major=$4} /^#define SDL_MINOR_VERSION/{minor=$4} /^#define SDL_PATCHLEVEL/{patch=$4} END{print major "." minor "." patch}' "$SDL_ROOT/include/SDL_version.h")"
+header_version="$(awk '/^#define SDL_MAJOR_VERSION[[:space:]]/ {major=$3} /^#define SDL_MINOR_VERSION[[:space:]]/ {minor=$3} /^#define SDL_PATCHLEVEL[[:space:]]/ {patch=$3} END {if(major == "" || minor == "" || patch == "") exit 1; print major "." minor "." patch}' "$SDL_ROOT/include/SDL_version.h")"
 [ "$header_version" = "$SDL_VERSION" ] || {
   echo "::error::SDL version mismatch: expected $SDL_VERSION, got $header_version"
   exit 1
