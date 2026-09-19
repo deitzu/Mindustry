@@ -1,0 +1,85 @@
+name: Continuous Build
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Test and build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout triggering commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: wrapper
+
+      - name: Clone and pin Arc
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          arc_ref="$(awk -F= '$1 == "archash" {print $2; exit}' gradle.properties | tr -d '[:space:]')"
+          if [ -z "$arc_ref" ]; then
+            echo "::error::archash is missing from gradle.properties"
+            exit 1
+          fi
+
+          arc_sha="$(curl -fsSL --retry 3 --retry-all-errors             -H 'Accept: application/vnd.github+json'             -H 'X-GitHub-Api-Version: 2022-11-28'             "https://api.github.com/repos/Anuken/Arc/commits/${arc_ref}" |
+            python3 -c 'import json, sys; print(json.load(sys.stdin)["sha"])')"
+
+          if ! printf '%s' "$arc_sha" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::Could not resolve archash='$arc_ref' to a full Arc commit SHA"
+            exit 1
+          fi
+
+          git clone --no-checkout --filter=blob:none --depth=1 https://github.com/Anuken/Arc ../Arc
+          git -C ../Arc fetch --no-tags --depth=1 origin "$arc_sha"
+          git -C ../Arc checkout --detach "$arc_sha"
+
+          actual_sha="$(git -C ../Arc rev-parse HEAD)"
+          if [ "$actual_sha" != "$arc_sha" ]; then
+            echo "::error::Arc checkout mismatch: expected $arc_sha, got $actual_sha"
+            exit 1
+          fi
+
+          echo "Arc archash: $arc_ref"
+          echo "Arc commit: $actual_sha"
+
+      # TASK 03 insertion point:
+      # Add the real Android ARM64 native probe here once TASK 03 establishes
+      # its actual Gradle task. Do not substitute the desktop Linux target.
+
+      - name: Run unit tests
+        run: ./gradlew tests:test --stacktrace
+
+      - name: Build desktop JAR
+        run: ./gradlew desktop:dist
+
+      - name: Verify desktop JAR
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f desktop/build/libs/Mindustry.jar
+          echo "Verified desktop/build/libs/Mindustry.jar"
+
+      - name: Upload desktop JAR
+        uses: actions/upload-artifact@v7
+        with:
+          name: Mindustry-${{ github.sha }}
+          path: desktop/build/libs/Mindustry.jar
