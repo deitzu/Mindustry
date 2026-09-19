@@ -36,7 +36,7 @@ diff --git a/backends/backend-sdl/build.gradle b/backends/backend-sdl/build.grad
 +            "-llog",
 +            "-landroid",
 +            "-ldl",
-+            "-lGLESv2",
++            "-lGLESv3",
 +            "-lGLESv1_CM"
 +        ]
 +
