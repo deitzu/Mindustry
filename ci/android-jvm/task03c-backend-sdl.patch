@@ -26,6 +26,7 @@ index 2deda3bb5d51501ef946d95dad2c2b8e23af29be..950a11c27af9b75cbe08b1a81bc90973
 +        def sdlBuild = new File(sdlRoot, "build").absolutePath
 +        headerDirs += (String[])[
 +            new File(sdlRoot, "include/SDL2").absolutePath,
++            new File(sdlBuild, "include/SDL2").absolutePath,
 +            new File(sdlBuild, "include").absolutePath,
 +            new File(sdlBuild, "include-config-release/SDL2").absolutePath
 +        ]
