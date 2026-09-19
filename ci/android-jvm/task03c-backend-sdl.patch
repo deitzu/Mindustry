@@ -49,7 +49,7 @@ diff --git a/backends/backend-sdl/build.gradle b/backends/backend-sdl/build.grad
 diff --git a/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java b/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java
 --- a/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java
 +++ b/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java
-@@ -9,9 +9,14 @@
+@@ -9,12 +9,17 @@
  
      /*JNI
  
@@ -64,19 +64,24 @@ diff --git a/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java b/backends/
  
      //copied from ios openGL source, I have no idea what I'm doing
  
-@@ -101,6 +106,11 @@
+     static jclass bufferClass;
+     static jclass byteBufferClass;
+     static jclass charBufferClass;
+@@ -101,9 +106,13 @@
      public static native String init(); /*
          nativeClassInit(env);
  
 +        #ifdef __ANDROID__
 +        return NULL;
-+        #else
-+        nativeClassInit(env);
++        #else        nativeClassInit(env);
 +
          GLenum glewError = glewInit();
          if(glewError != GLEW_OK){
              return env->NewStringUTF((const char*)glewGetErrorString(glewError));
-@@ -112,6 +122,7 @@
+         }
+ 
+         if(glGenFramebuffers != 0 || glGenFramebuffersEXT != 0){
+@@ -112,9 +121,10 @@
          }else{
              return env->NewStringUTF("Missing framebuffer_object extension.");
          }
@@ -84,7 +89,10 @@ diff --git a/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java b/backends/
      */
  
      //endregion
-@@ -298,21 +309,29 @@
+     //region openGL 2.0
+ 
+     public static native void glActiveTexture(int texture); /*
+@@ -298,9 +308,12 @@
      */
  
      public static native void glBindFramebuffer(int target, int framebuffer); /*
@@ -94,6 +102,10 @@ diff --git a/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java b/backends/
          if(glBindFramebuffer){
              glBindFramebuffer(target, framebuffer);
              return;
+         }
+ 
+         glBindFramebufferEXT(target, framebuffer);
+@@ -304,12 +317,16 @@
          }
  
          glBindFramebufferEXT(target, framebuffer);
@@ -110,11 +122,18 @@ diff --git a/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java b/backends/
          }
  
          glBindRenderbufferEXT(target, renderbuffer);
+@@ -313,9 +330,10 @@
+         }
+ 
+         glBindRenderbufferEXT(target, renderbuffer);
 +        #endif
      */
  
      public static native void glBlendColor(float red, float green, float blue, float alpha); /*
-@@ -340,11 +359,15 @@
+         glBlendColor(red, green, blue, alpha);
+     */
+ 
+@@ -340,14 +358,18 @@
      */
  
      public static native int glCheckFramebufferStatus(int target); /*
@@ -130,7 +149,10 @@ diff --git a/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java b/backends/
      */
  
      public static native void glCompileShader(int shader); /*
-@@ -365,6 +388,10 @@
+         glCompileShader(shader);
+     */
+ 
+@@ -365,9 +387,13 @@
      */
  
      public static native void glDeleteFramebuffer(int framebuffer); /*
@@ -141,7 +163,10 @@ diff --git a/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java b/backends/
          if(glDeleteFramebuffers){
              GLuint b = framebuffer;
              glDeleteFramebuffers(1, &b);
-@@ -373,6 +400,7 @@
+             return;
+         }
+ 
+@@ -373,9 +399,10 @@
  
          GLuint b = framebuffer;
          glDeleteFramebuffersEXT(1, &b);
@@ -149,7 +174,10 @@ diff --git a/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java b/backends/
      */
  
      public static native void glDeleteProgram(int program); /*
-@@ -380,7 +408,11 @@
+         glDeleteProgram(program);
+     */
+ 
+@@ -380,10 +407,14 @@
      */
  
      public static native void glDeleteRenderbuffer(int renderbuffer); /*
@@ -161,7 +189,10 @@ diff --git a/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java b/backends/
  
          if(glDeleteRenderbuffers){
              glDeleteRenderbuffers(1, &b);
-@@ -388,6 +420,7 @@
+             return;
+         }
+ 
+@@ -388,9 +419,10 @@
          }
  
          glDeleteRenderbuffersEXT(1, &b);
@@ -169,7 +200,113 @@ diff --git a/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java b/backends/
      */
  
      public static native void glDeleteShader(int shader); /*
-@@ -501,12 +534,16 @@
+         glDeleteShader(shader);
+     */
+ 
+@@ -411,9 +443,12 @@
+     */
+ 
+     public static native void glFramebufferRenderbuffer(int target, int attachment, int renderbuffertarget, int renderbuffer); /*
++        #ifdef __ANDROID__
++        glFramebufferRenderbuffer(target, attachment, renderbuffertarget, renderbuffer);
++        #else
+         if(glFramebufferRenderbuffer){
+             glFramebufferRenderbuffer(target, attachment, renderbuffertarget, renderbuffer);
+             return;
+         }
+ 
+         glFramebufferRenderbufferEXT(target, attachment, renderbuffertarget, renderbuffer);
+@@ -417,12 +452,16 @@
+         }
+ 
+         glFramebufferRenderbufferEXT(target, attachment, renderbuffertarget, renderbuffer);
++        #endif
+     */
+ 
+     public static native void glFramebufferTexture2D(int target, int attachment, int textarget, int texture, int level); /*
++        #ifdef __ANDROID__
++        glFramebufferTexture2D(target, attachment, textarget, texture, level);
++        #else
+         if(glFramebufferTexture2D){
+             glFramebufferTexture2D(target, attachment, textarget, texture, level);
+             return;
+         }
+ 
+         glFramebufferTexture2DEXT(target, attachment, textarget, texture, level);
+@@ -426,9 +465,10 @@
+         }
+ 
+         glFramebufferTexture2DEXT(target, attachment, textarget, texture, level);
++        #endif
+     */
+ 
+     public static native int glGenBuffer(); /*
+         GLuint result;
+         glGenBuffers(1, &result);
+         return result;
+@@ -435,9 +475,12 @@
+     */
+ 
+     public static native void glGenerateMipmap(int target); /*
++        #ifdef __ANDROID__
++        glGenerateMipmap(target);
++        #else
+         if(glGenerateMipmap){
+             glGenerateMipmap(target);
+             return;
+         }
+ 
+         glGenerateMipmapEXT(target);
+@@ -441,12 +484,18 @@
+         }
+ 
+         glGenerateMipmapEXT(target);
++        #endif
+     */
+ 
+     public static native int glGenFramebuffer(); /*
++        #ifdef __ANDROID__
++        GLuint result;
++        glGenFramebuffers(1, &result);
++        return result;
++        #else
+         if(glGenFramebuffers){
+             GLuint result;
+             glGenFramebuffers(1, &result);
+             return result;
+         }
+ 
+@@ -453,12 +502,18 @@
+         GLuint result;
+         glGenFramebuffersEXT(1, &result);
+         return result;
++        #endif
+     */
+ 
+     public static native int glGenRenderbuffer(); /*
++        #ifdef __ANDROID__
++        GLuint result;
++        glGenRenderbuffers(1, &result);
++        return result;
++        #else
+         if(glGenRenderbuffers){
+             GLuint result;
+             glGenRenderbuffers(1, &result);
+             return result;
+         }
+ 
+@@ -465,9 +520,10 @@
+         GLuint result;
+         glGenRenderbuffersEXT(1, &result);
+         return result;
++        #endif
+     */
+ 
+     public static native String glGetActiveAttrib(int program, int index, Object size, Object type); /*
+         char cname[2048];
+ 	    void* sizePtr = getDirectBufferPointer( env, size );
+ 	    void* typePtr = getDirectBufferPointer( env, type );
+@@ -501,9 +557,12 @@
      */
  
      public static native void glGetFramebufferAttachmentParameteriv(int target, int attachment, int pname, IntBuffer params); /*
@@ -182,11 +319,18 @@ diff --git a/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java b/backends/
          }
  
          glGetFramebufferAttachmentParameterivEXT(target, attachment, pname, params);
+@@ -507,9 +566,10 @@
+         }
+ 
+         glGetFramebufferAttachmentParameterivEXT(target, attachment, pname, params);
 +        #endif
      */
  
      public static native void glGetProgramiv(int program, int pname, IntBuffer params); /*
-@@ -521,12 +558,16 @@
+         glGetProgramiv(program, pname, params);
+     */
+ 
+@@ -521,9 +581,12 @@
      */
  
      public static native void glGetRenderbufferParameteriv(int target, int pname, IntBuffer params); /*
@@ -199,11 +343,18 @@ diff --git a/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java b/backends/
          }
  
          glGetRenderbufferParameterivEXT(target, pname, params);
+@@ -527,9 +590,10 @@
+         }
+ 
+         glGetRenderbufferParameterivEXT(target, pname, params);
 +        #endif
      */
  
      public static native void glGetShaderiv(int shader, int pname, IntBuffer params); /*
-@@ -581,11 +622,15 @@
+         glGetShaderiv(shader, pname, params);
+     */
+ 
+@@ -581,14 +645,18 @@
      */
  
      public static native boolean glIsFramebuffer(int framebuffer); /*
@@ -219,7 +370,10 @@ diff --git a/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java b/backends/
      */
  
      public static native boolean glIsProgram(int program); /*
-@@ -593,11 +638,15 @@
+         return glIsProgram(program);
+     */
+ 
+@@ -593,14 +661,18 @@
      */
  
      public static native boolean glIsRenderbuffer(int renderbuffer); /*
@@ -235,7 +389,10 @@ diff --git a/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java b/backends/
      */
  
      public static native boolean glIsShader(int shader); /*
-@@ -617,12 +666,16 @@
+         return glIsShader(shader);
+     */
+ 
+@@ -617,9 +689,12 @@
      */
  
      public static native void glRenderbufferStorage(int target, int internalformat, int width, int height); /*
@@ -248,11 +405,18 @@ diff --git a/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java b/backends/
          }
  
          glRenderbufferStorageEXT(target, internalformat, width, height);
+@@ -623,9 +698,10 @@
+         }
+ 
+         glRenderbufferStorageEXT(target, internalformat, width, height);
 +        #endif
      */
  
      public static native void glSampleCoverage(float value, boolean invert); /*
-@@ -1150,7 +1203,11 @@
+         glSampleCoverage(value, invert);
+     */
+ 
+@@ -1150,10 +1226,14 @@
      */
  
      public static native void glProgramParameteri(int program, int pname, int value); /*
@@ -264,3 +428,6 @@ diff --git a/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java b/backends/
      */
  
      public static native void glInvalidateFramebuffer(int target, int numAttachments, IntBuffer attachments); /*
+         glInvalidateFramebuffer(target, numAttachments, (GLenum*)attachments);
+     */
+ 
