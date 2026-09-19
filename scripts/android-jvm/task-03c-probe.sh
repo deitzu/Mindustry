@@ -5,7 +5,7 @@ ARC_EXPECTED="8eb00ffff0126d0576c67df46f99b8f6bccd96fe"
 SDL_VERSION="2.32.8"
 SDL_URL="https://github.com/libsdl-org/SDL/releases/download/release-2.32.8/SDL2-2.32.8.tar.gz"
 
-ROOT="${git rev-parse --show-toplevel}"
+ROOT="$(git rev-parse --show-toplevel)"
 ARC_DIR="$ROOT/../Arc"
 PATCH_FILE="$ROOT/ci/android-jvm/task03c-backend-sdl.patch"
 SDL_ROOT="$ROOT/../SDL2-2.32.8"
@@ -14,7 +14,7 @@ OUT="$ROOT/ci-artifacts/task03c"
 mkdir -p "$OUT"
 
 echo "== TASK 03C: verify Arc before patch =="
-actual_arc="${git -C "$ARC_DIR" rev-parse HEAD}"
+actual_arc="$(git -C "$ARC_DIR" rev-parse HEAD)"
 [ "$actual_arc" = "$ARC_EXPECTED" ] || {
   echo "::error::Arc revision mismatch before patch: expected $ARC_EXPECTED, got $actual_arc"
   exit 1
@@ -26,7 +26,7 @@ git -C "$ARC_DIR" diff --exit-code
 git -C "$ARC_DIR" apply --check "$PATCH_FILE"
 git -C "$ARC_DIR" apply "$PATCH_FILE"
 
-post_arc="${git -C "$ARC_DIR" rev-parse HEAD}"
+post_arc="$(git -C "$ARC_DIR" rev-parse HEAD)"
 [ "$post_arc" = "$ARC_EXPECTED" ] || {
   echo "::error::Arc revision changed unexpectedly after patch: $post_arc"
   exit 1
@@ -48,7 +48,7 @@ fi
   echo "::error::SDL source directory is missing: $SDL_ROOT"
   exit 1
 }
-header_version="${awk -F" |[()]" '/^#define SDL_MAJOR_VERSION/{major=$4} /^#define SDL_MINOR_VERSION/{minor=$4} /^#define SDL_PATCHLEVEL/{patch=$4} END{print major "." minor "." patch}' "$SDL_ROOT/include/SDL_version.h"}"
+header_version="$(awk -F" |[()]" '/^#define SDL_MAJOR_VERSION/{major=$4} /^#define SDL_MINOR_VERSION/{minor=$4} /^#define SDL_PATCHLEVEL/{patch=$4} END{print major "." minor "." patch}' "$SDL_ROOT/include/SDL_version.h")"
 [ "$header_version" = "$SDL_VERSION" ] || {
   echo "::error::SDL version mismatch: expected $SDL_VERSION, got $header_version"
   exit 1
@@ -95,7 +95,7 @@ echo "SDL static archive: $SDL_STATIC"
 echo "== TASK 03C: inspect Gradle task graph =="
 TASKS_FILE="$OUT/backend-sdl-tasks.txt"
 ( cd "$ARC_DIR" && ./gradlew :backends:backend-sdl:tasks --all ) | tee "$TASKS_FILE"
-ANDROID_TASK="${awk '$1 ~ /^jnigenBuild/ && /Android/ {print $1; exit}' "$TASKS_FILE"}"
+ANDROID_TASK="$(awk '$1 ~ /^jnigenBuild/ && /Android/ {print $1; exit}' "$TASKS_FILE")"
 if [ -z "$ANDROID_TASK" ]; then
   echo "---- candidate jnigen Android tasks ----"
   grep -Ei 'jnigen|android' "$TASKS_FILE" || true
@@ -138,9 +138,9 @@ SYMBOLS="$OUT/readelf-symbols.txt"
 "$READELF" -d "$probe" | tee "$DYNAMIC"
 "$READELF" -Ws "$probe" | tee "$SYMBOLS"
 
-machine="${$READELF -h "$probe" | awk -F: '/Machine:/{gsub(/^ +/,"",$2); print $2}'}"
-class="${$READELF -h "$probe" | awk -F: '/Class:/{gsub(/^ +/,"",$2); print $2}'}"
-soname="${$READELF -d "$probe" | sed -n 's/.*SONAME.*\[\(.*\)\].*/\1/p' | head -n 1 || true}"
+machine="$($READELF -h "$probe" | awk -F: '/Machine:/{gsub(/^ +/,"",$2); print $2}')"
+class="$($READELF -h "$probe" | awk -F: '/Class:/{gsub(/^ +/,"",$2); print $2}')"
+soname="$($READELF -d "$probe" | sed -n 's/.*SONAME.*\[\(.*\)\].*/\1/p' | head -n 1 || true)"
 printf 'TASK_03C\nArc revision=%s\nSDL version=%s\nSDL ABI=arm64-v8a\nNative task=%s\nOutput path=%s\nELF class=%s\nELF machine=%s\nSONAME=%s\n' "$post_arc" "$header_version" "$ANDROID_TASK" "$probe" "$class" "$machine" "${soname:-<none>}" | tee "$OUT/verification-summary.txt"
 "$READELF" -d "$probe" | sed -n 's/.*NEEDED.*\[\(.*\)\].*/\1/p' | tee "$OUT/dt-needed.txt"
 
@@ -152,7 +152,7 @@ for forbidden in "${forbidden_patterns[@]}"; do
   fi
 done
 
-jni_count="${grep -c 'Java_arc_backend_sdl_jni_' "$SYMBOLS" || true}"
+jni_count="$(grep -c 'Java_arc_backend_sdl_jni_' "$SYMBOLS" || true)"
 [ "$jni_count" -gt 0 ] || { echo "::error::No generated Arc SDL JNI symbols found"; exit 1; }
 echo "JNI symbol count: $jni_count" | tee -a "$OUT/verification-summary.txt"
 echo "Forbidden dependency scan: PASS" | tee -a "$OUT/verification-summary.txt"
