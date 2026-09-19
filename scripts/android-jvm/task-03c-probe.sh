@@ -107,14 +107,26 @@ echo "Discovered Android native task: :backends:backend-sdl:$ANDROID_TASK"
 echo "== TASK 03C: generate jnigen sources =="
 ( cd "$ARC_DIR" && ./gradlew :backends:backend-sdl:jnigen --stacktrace )
 
-echo "== DEBUG-07: inspect generated Android.mk after jnigen =="
-ANDROID_MK="$ARC_DIR/backends/backend-sdl/build/jnigen/target/android32/Android.mk"
-[ -f "$ANDROID_MK" ] || { echo "::error::Expected generated Android.mk not found: $ANDROID_MK"; exit 1; }
-echo "Android.mk: $ANDROID_MK"
-grep -nE "LOCAL_C_INCLUDES|LOCAL_CFLAGS|LOCAL_CPPFLAGS|SDL2|SDL" "$ANDROID_MK" || true
-
-echo "== TASK 03C: compile Android backend-sdl =="
+echo "== DEBUG-07: compile Android backend-sdl and retain first native failure =="
+set +e
 ( cd "$ARC_DIR" && ./gradlew ":backends:backend-sdl:$ANDROID_TASK" --stacktrace )
+native_status=$?
+set -e
+
+echo "== DEBUG-07: inspect generated Android.mk after native task starts =="
+ANDROID_MK="$ARC_DIR/backends/backend-sdl/build/jnigen/target/android32/Android.mk"
+if [ -f "$ANDROID_MK" ]; then
+  echo "Android.mk: $ANDROID_MK"
+  grep -nE "LOCAL_C_INCLUDES|LOCAL_CFLAGS|LOCAL_CPPFLAGS|SDL2|SDL" "$ANDROID_MK" || true
+else
+  echo "::error::Android.mk was not generated at expected path: $ANDROID_MK"
+  find "$ARC_DIR/backends/backend-sdl/build/jnigen" -type f -name Android.mk -print || true
+fi
+
+[ "$native_status" -eq 0 ] || {
+  echo "::error::Android native task failed with status $native_status"
+  exit "$native_status"
+}
 
 echo "== TASK 03C: locate Android ARM64 JNI library =="
 mapfile -t candidates < <(find "$ARC_DIR/backends/backend-sdl" -type f -name '*.so' -print)
