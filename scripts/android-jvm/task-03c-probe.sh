@@ -104,13 +104,14 @@ if [ -z "$ANDROID_TASK" ]; then
 fi
 echo "Discovered Android native task: :backends:backend-sdl:$ANDROID_TASK"
 
-echo "== DEBUG-07: inspect generated Android.mk before compile =="
-ANDROID_MK="$ARC_DIR/backends/backend-sdl/build/jnigen/target/android32/Android.mk"
-[ -f "$ANDROID_MK" ] || { echo "::error::Expected generated Android.mk not found: $ANDROID_MK"; exit 1; }
-grep -nE "LOCAL_C_INCLUDES|LOCAL_CPPFLAGS|SDL2|SDL" "$ANDROID_MK" || true
-
 echo "== TASK 03C: generate jnigen sources =="
 ( cd "$ARC_DIR" && ./gradlew :backends:backend-sdl:jnigen --stacktrace )
+
+echo "== DEBUG-07: inspect generated Android.mk after jnigen =="
+ANDROID_MK="$ARC_DIR/backends/backend-sdl/build/jnigen/target/android32/Android.mk"
+[ -f "$ANDROID_MK" ] || { echo "::error::Expected generated Android.mk not found: $ANDROID_MK"; exit 1; }
+echo "Android.mk: $ANDROID_MK"
+grep -nE "LOCAL_C_INCLUDES|LOCAL_CFLAGS|LOCAL_CPPFLAGS|SDL2|SDL" "$ANDROID_MK" || true
 
 echo "== TASK 03C: compile Android backend-sdl =="
 ( cd "$ARC_DIR" && ./gradlew ":backends:backend-sdl:$ANDROID_TASK" --stacktrace )
