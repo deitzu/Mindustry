@@ -263,4 +263,4 @@ index cc95b47ca5b46f6a1c25dd575d9d6600c4f5c813..39cc0c7f754e87d95d7f152f2b6136da
 +        #endif
      */
  
-     public static native void glInvalidateFramebuffer(int target, int numAttachments, IntBuffer attachments); /* 
+     public static native void glInvalidateFramebuffer(int target, int numAttachments, IntBuffer attachments); /*
