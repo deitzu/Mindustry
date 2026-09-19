@@ -1,26 +1,20 @@
 diff --git a/backends/backend-sdl/build.gradle b/backends/backend-sdl/build.gradle
-index 2deda3b..0000000 100644
+index 2deda3bb5d51501ef946d95dad2c2b8e23af29be..950a11c27af9b75cbe08b1a81bc90973d25a81ee 100644
 --- a/backends/backend-sdl/build.gradle
 +++ b/backends/backend-sdl/build.gradle
-@@ -50,11 +50,16 @@ jnigen{
+@@ -88,6 +88,10 @@
      def mainRoot = "build/jnigen/sources"
  
      all{
--        cIncludes = ["$mainRoot/glew-2.2.0/src/glew.c"]
--        headerDirs = ["$mainRoot/glew-2.2.0/include"]
-     }
- 
-+    // GLEW is required by the existing desktop OpenGL targets only.
-+    each({ it.os != Android }){
-+        cIncludes = ["$mainRoot/glew-2.2.0/src/glew.c"]
-+        headerDirs = ["$mainRoot/glew-2.2.0/include"]
 +    }
 +
-     addLinux(x64, x86){
-         cppFlags += execCmd("sdl2-config --cflags").split(" ")
-         cFlags = cppFlags
-@@ -75,6 +80,25 @@ jnigen{
-         linkerFlags += (String[])["-L${sdlRoot.replace("\\", "/")}/lib"]
++    // GLEW is required by the existing desktop OpenGL targets only.
++    each({ it.os != Android }){
+         cIncludes = ["$mainRoot/glew-2.2.0/src/glew.c"]
+         headerDirs = ["$mainRoot/glew-2.2.0/include"]
+     }
+@@ -99,6 +103,32 @@
+         linkerFlags = "-shared -m64".split(" ")
      }
  
 +    addAndroid(AndroidABI.ABI_ARM64_V8A){
@@ -49,15 +43,14 @@ index 2deda3b..0000000 100644
 +        androidApplicationMk += ["APP_STL := c++_static"]
 +    }
 +
-     if(System.getProperty("os.arch") != "aarch64"){
-         addMac(x64, ARM){
-             cppFlags = cFlags = (execCmd("sdl2-config --cflags") + " -c -Wall -O2 -arch x86_64 -DFIXED_POINT -fmessage-length=0 -fPIC -mmacosx-version-min=10.9 -stdlib=libc++").split(" ")
-             linkerFlags = "-shared -arch x86_64 -mmacosx-version-min=10.9 -stdlib=libc++".split(" ")
+     addWindows(x64, x86){
+         def path = "SDL2-$sdlVersion/x86_64-w64-mingw32"
+         def root = "$rootDir/backends/backend-sdl/build/jnigen/sources"
 diff --git a/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java b/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java
-index 8db6a4d..0000000 100644
+index cc95b47ca5b46f6a1c25dd575d9d6600c4f5c813..39cc0c7f754e87d95d7f152f2b6136da0894bf09 100644
 --- a/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java
 +++ b/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java
-@@ -9,9 +9,13 @@ public class SDLGL{
+@@ -9,9 +9,14 @@
  
      /*JNI
  
@@ -66,32 +59,33 @@ index 8db6a4d..0000000 100644
 +    #include <GLES2/gl2ext.h>
 +    #else
      #define GLEW_STATIC
+ 
      #include "GL/glew.h"
 +    #endif
  
      //copied from ios openGL source, I have no idea what I'm doing
-@@ -100,16 +104,20 @@ public class SDLGL{
-     @Nullable
+ 
+@@ -101,6 +106,10 @@
      public static native String init(); /*
          nativeClassInit(env);
  
 +        #ifdef __ANDROID__
 +        return NULL;
-+        #else
++        #else        nativeClassInit(env);
++
          GLenum glewError = glewInit();
          if(glewError != GLEW_OK){
              return env->NewStringUTF((const char*)glewGetErrorString(glewError));
-         }
- 
-         if(glGenFramebuffers != 0 || glGenFramebuffersEXT != 0){
-             //no error message
-             return NULL;
+@@ -112,6 +121,7 @@
          }else{
              return env->NewStringUTF("Missing framebuffer_object extension.");
          }
 +        #endif
      */
-@@ -298,21 +307,29 @@ public class SDLGL{
+ 
+     //endregion
+@@ -298,21 +308,29 @@
+     */
  
      public static native void glBindFramebuffer(int target, int framebuffer); /*
 +        #ifdef __ANDROID__
@@ -118,7 +112,10 @@ index 8db6a4d..0000000 100644
          glBindRenderbufferEXT(target, renderbuffer);
 +        #endif
      */
-@@ -340,12 +357,16 @@ public class SDLGL{
+ 
+     public static native void glBlendColor(float red, float green, float blue, float alpha); /*
+@@ -340,11 +358,15 @@
+     */
  
      public static native int glCheckFramebufferStatus(int target); /*
 +        #ifdef __ANDROID__
@@ -131,7 +128,10 @@ index 8db6a4d..0000000 100644
          return glCheckFramebufferStatusEXT(target);
 +        #endif
      */
-@@ -365,27 +386,39 @@ public class SDLGL{
+ 
+     public static native void glCompileShader(int shader); /*
+@@ -365,6 +387,10 @@
+     */
  
      public static native void glDeleteFramebuffer(int framebuffer); /*
 +        #ifdef __ANDROID__
@@ -141,31 +141,36 @@ index 8db6a4d..0000000 100644
          if(glDeleteFramebuffers){
              GLuint b = framebuffer;
              glDeleteFramebuffers(1, &b);
-             return;
-         }
+@@ -373,6 +399,7 @@
  
          GLuint b = framebuffer;
          glDeleteFramebuffersEXT(1, &b);
 +        #endif
      */
-@@ -380,15 +413,23 @@ public class SDLGL{
+ 
+     public static native void glDeleteProgram(int program); /*
+@@ -380,7 +407,11 @@
+     */
  
      public static native void glDeleteRenderbuffer(int renderbuffer); /*
 +        #ifdef __ANDROID__
-+        GLuint b = renderbuffer;
+         GLuint b = renderbuffer;
 +        glDeleteRenderbuffers(1, &b);
 +        #else
++        GLuint b = renderbuffer;
+ 
          if(glDeleteRenderbuffers){
-             GLuint b = renderbuffer;
              glDeleteRenderbuffers(1, &b);
-             return;
+@@ -388,6 +419,7 @@
          }
  
-         GLuint b = renderbuffer;
          glDeleteRenderbuffersEXT(1, &b);
 +        #endif
      */
-@@ -497,12 +538,16 @@ public class SDLGL{
+ 
+     public static native void glDeleteShader(int shader); /*
+@@ -501,12 +533,16 @@
+     */
  
      public static native void glGetFramebufferAttachmentParameteriv(int target, int attachment, int pname, IntBuffer params); /*
 +        #ifdef __ANDROID__
@@ -179,7 +184,10 @@ index 8db6a4d..0000000 100644
          glGetFramebufferAttachmentParameterivEXT(target, attachment, pname, params);
 +        #endif
      */
-@@ -519,13 +564,17 @@ public class SDLGL{
+ 
+     public static native void glGetProgramiv(int program, int pname, IntBuffer params); /*
+@@ -521,12 +557,16 @@
+     */
  
      public static native void glGetRenderbufferParameteriv(int target, int pname, IntBuffer params); /*
 +        #ifdef __ANDROID__
@@ -193,7 +201,10 @@ index 8db6a4d..0000000 100644
          glGetRenderbufferParameterivEXT(target, pname, params);
 +        #endif
      */
-@@ -579,11 +628,15 @@ public class SDLGL{
+ 
+     public static native void glGetShaderiv(int shader, int pname, IntBuffer params); /*
+@@ -581,11 +621,15 @@
+     */
  
      public static native boolean glIsFramebuffer(int framebuffer); /*
 +        #ifdef __ANDROID__
@@ -206,7 +217,10 @@ index 8db6a4d..0000000 100644
          return glIsFramebufferEXT(framebuffer);
 +        #endif
      */
-@@ -591,11 +644,15 @@ public class SDLGL{
+ 
+     public static native boolean glIsProgram(int program); /*
+@@ -593,11 +637,15 @@
+     */
  
      public static native boolean glIsRenderbuffer(int renderbuffer); /*
 +        #ifdef __ANDROID__
@@ -219,7 +233,10 @@ index 8db6a4d..0000000 100644
          return glIsRenderbufferEXT(renderbuffer);
 +        #endif
      */
-@@ -615,13 +672,17 @@ public class SDLGL{
+ 
+     public static native boolean glIsShader(int shader); /*
+@@ -617,12 +665,16 @@
+     */
  
      public static native void glRenderbufferStorage(int target, int internalformat, int width, int height); /*
 +        #ifdef __ANDROID__
@@ -233,7 +250,10 @@ index 8db6a4d..0000000 100644
          glRenderbufferStorageEXT(target, internalformat, width, height);
 +        #endif
      */
-@@ -1150,8 +1211,13 @@ public class SDLGL{
+ 
+     public static native void glSampleCoverage(float value, boolean invert); /*
+@@ -1150,7 +1202,11 @@
+     */
  
      public static native void glProgramParameteri(int program, int pname, int value); /*
 +        #ifdef __ANDROID__
@@ -243,5 +263,4 @@ index 8db6a4d..0000000 100644
 +        #endif
      */
  
-     //endregion
- }
+     public static native void glInvalidateFramebuffer(int target, int numAttachments, IntBuffer attachments); /* 
