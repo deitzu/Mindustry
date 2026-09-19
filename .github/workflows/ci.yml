@@ -195,9 +195,16 @@ jobs:
           echo "ndk-build: $ndk_build"
           echo "CMake: $cmake_bin"
 
-      # TASK 03 insertion point:
-      # Add the real Android ARM64 native probe here once TASK 03 establishes
-      # its actual Gradle task. Do not substitute the desktop Linux target.
+      - name: Run Android ARM64 SDL native probe
+        shell: bash
+        run: bash scripts/android-jvm/task-03c-probe.sh
+
+      - name: Upload Android ARM64 SDL native probe
+        uses: actions/upload-artifact@v7
+        with:
+          name: Android-SDL-native-probe-${{ github.sha }}
+          path: ci-artifacts/task03c
+          if-no-files-found: error
 
       - name: Run unit tests
         run: ./gradlew tests:test --stacktrace
