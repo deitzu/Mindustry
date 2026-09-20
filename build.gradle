@@ -263,7 +263,11 @@ project(":desktop"){
         implementation arcModule("extensions:discord")
         implementation arcModule("natives:natives-filedialogs")
         implementation arcModule("extensions:filedialogs")
-        implementation arcModule("natives:natives-desktop")
+        if(project.hasProperty("androidJvm")){
+            implementation arcModule("natives:natives-android")
+        }else{
+            implementation arcModule("natives:natives-desktop")
+        }
         implementation arcModule("natives:natives-freetype-desktop")
 
         if(debugged()) implementation project(":debug")
