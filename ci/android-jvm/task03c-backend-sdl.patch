@@ -16,13 +16,13 @@ diff --git a/backends/backend-sdl/build.gradle b/backends/backend-sdl/build.grad
          linkerFlags = "-shared -m64".split(" ")
      }
  
-+    def sdlRoot = System.getenv("SDL2_ANDROID_ROOT")
++    def androidSdlRoot = System.getenv("SDL2_ANDROID_ROOT")
 +
-+    if(sdlRoot != null && !sdlRoot.isBlank()){
++    if(androidSdlRoot != null && !androidSdlRoot.isBlank()){
 +        addAndroid(ABI_ARM64_V8A){
-+            def sdlBuild = new File(sdlRoot, "build").absolutePath
++            def sdlBuild = new File(androidSdlRoot, "build").absolutePath
 +            headerDirs += (String[])[
-+                new File(sdlRoot, "include/SDL2").absolutePath,
++                new File(androidSdlRoot, "include/SDL2").absolutePath,
 +                new File(sdlBuild, "include/SDL2").absolutePath,
 +                new File(sdlBuild, "include").absolutePath,
 +                new File(sdlBuild, "include-config-release/SDL2").absolutePath
