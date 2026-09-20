@@ -236,6 +236,17 @@ jobs:
         shell: bash
         run: bash scripts/android-jvm/task-03c-build-real-android-load-probe.sh desktop/build/libs/Mindustry.jar ci-artifacts/task03c/libsdl-arc.so
 
+      - name: Build Android absolute-path native load diagnostic
+        shell: bash
+        run: bash scripts/android-jvm/task-03c-build-absolute-load-probe.sh ci-artifacts/task03c/libsdl-arc.so
+
+      - name: Upload Android absolute-path native load diagnostic
+        uses: actions/upload-artifact@v7
+        with:
+          name: Android-JVM-absolute-load-probe-${{ github.sha }}
+          path: ci-artifacts/android-jvm-absolute-load-probe
+          if-no-files-found: error
+
       - name: Probe Android JVM native loader boundary
         shell: bash
         run: bash scripts/android-jvm/task-03c-runtime-loader-probe.sh desktop/build/libs/Mindustry.jar
