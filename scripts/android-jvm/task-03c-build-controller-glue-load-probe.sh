@@ -19,7 +19,6 @@ ACTIVITY_SOURCE="$ANDROID_JAVA_ROOT/org/libsdl/app/SDLActivity.java"
 SDL_SOURCE="$ANDROID_JAVA_ROOT/org/libsdl/app/SDL.java"
 AUDIO_SOURCE="$ANDROID_JAVA_ROOT/org/libsdl/app/SDLAudioManager.java"
 CONTROLLER_SOURCE="$ANDROID_JAVA_ROOT/org/libsdl/app/SDLControllerManager.java"
-INPUT_SOURCE="$ANDROID_JAVA_ROOT/org/libsdl/app/SDLInputConnection.java"
 DIRECT_CLASSES=(SDLActivity SDLInputConnection SDLAudioManager SDLControllerManager)
 
 [ -f "$NATIVE_LIB" ] || {
@@ -41,7 +40,7 @@ actual_arc="$(git -C "$ARC_DIR" rev-parse HEAD)"
 if [ ! -f "$SDL_ROOT/include/SDL2/SDL_version.h" ]; then
   echo "== TASK 03C-DEBUG-14: obtain SDL $SDL_VERSION independently =="
   rm -rf "$SDL_ROOT"
-  git clone --no-tags --depth=1 --branch "$SDL_VERSION" https://github.com/libsdl-org/SDL "$SDL_ROOT"
+  git clone --no-tags --depth=1 --branch "release-$SDL_VERSION" https://github.com/libsdl-org/SDL "$SDL_ROOT"
 fi
 
 actual_sdl_commit="$(git -C "$SDL_ROOT" rev-parse HEAD)"
@@ -61,7 +60,7 @@ header_version="$(awk '/^#define SDL_MAJOR_VERSION[[:space:]]/ {major=$3} /^#def
   exit 1
 }
 
-for source in "$ACTIVITY_SOURCE" "$INPUT_SOURCE" "$SDL_SOURCE" "$AUDIO_SOURCE" "$CONTROLLER_SOURCE"; do
+for source in "$ACTIVITY_SOURCE" "$SDL_SOURCE" "$AUDIO_SOURCE" "$CONTROLLER_SOURCE"; do
   [ -f "$source" ] || {
     echo "::error::Required SDL Android Java source not found: $source"
     exit 1
@@ -235,7 +234,6 @@ javac -source 8 -target 8 -proc:none \
   -sourcepath "$ANDROID_JAVA_ROOT" \
   -d "$CLS" \
   "$ACTIVITY_SOURCE" \
-  "$INPUT_SOURCE" \
   "$SDL_SOURCE" \
   "$AUDIO_SOURCE" \
   "$CONTROLLER_SOURCE" \
@@ -304,7 +302,7 @@ echo "SDL source version: $header_version"
 echo "SDL source commit: $actual_sdl_commit"
 echo "Android API jar: $ANDROID_JAR"
 echo "SDL Android Java source files:"
-printf '  %s\n' "$ACTIVITY_SOURCE" "$INPUT_SOURCE" "$SDL_SOURCE" "$AUDIO_SOURCE" "$CONTROLLER_SOURCE"
+printf '  %s\n' "$ACTIVITY_SOURCE" "$SDL_SOURCE" "$AUDIO_SOURCE" "$CONTROLLER_SOURCE"
 echo "Direct JNI_OnLoad Java classes:"
 printf '  %s\n' "${DIRECT_CLASSES[@]}"
 echo "SDLInputConnection source declaration: SDLActivity.java (top-level class)"
