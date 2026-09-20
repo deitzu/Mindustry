@@ -1,9 +1,7 @@
 diff --git a/arc-core/src/arc/util/OS.java b/arc-core/src/arc/util/OS.java
 --- a/arc-core/src/arc/util/OS.java
 +++ b/arc-core/src/arc/util/OS.java
-@@ -37,9 +37,8 @@
-     public static boolean isDesktop;
- 
+@@ -39,8 +39,7 @@
      static{
 -        if(propNoNull("java.runtime.name").contains("Android Runtime") || propNoNull("java.vm.vendor").contains("The Android Project") || propNoNull("java.vendor").contains("The Android Project")){
 +        if(propNoNull("java.runtime.name").contains("Android") || propNoNull("java.vm.vendor").contains("The Android Project") || propNoNull("java.vendor").contains("The Android Project")){
@@ -13,7 +11,7 @@ diff --git a/arc-core/src/arc/util/OS.java b/arc-core/src/arc/util/OS.java
              isMac = false;
 -            is64Bit = false;
          }
-
+ 
 diff --git a/backends/backend-sdl/build.gradle b/backends/backend-sdl/build.gradle
 --- a/backends/backend-sdl/build.gradle
 +++ b/backends/backend-sdl/build.gradle
