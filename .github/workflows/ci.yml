@@ -247,6 +247,17 @@ jobs:
           path: ci-artifacts/android-jvm-absolute-load-probe
           if-no-files-found: error
 
+      - name: Build SDL Android controller Java glue diagnostic
+        shell: bash
+        run: bash scripts/android-jvm/task-03c-build-controller-glue-load-probe.sh ci-artifacts/task03c/libsdl-arc.so
+
+      - name: Upload SDL Android controller Java glue diagnostic
+        uses: actions/upload-artifact@v7
+        with:
+          name: Android-JVM-controller-glue-load-probe-${{ github.sha }}
+          path: ci-artifacts/android-jvm-controller-glue-load-probe
+          if-no-files-found: error
+
       - name: Probe Android JVM native loader boundary
         shell: bash
         run: bash scripts/android-jvm/task-03c-runtime-loader-probe.sh desktop/build/libs/Mindustry.jar
