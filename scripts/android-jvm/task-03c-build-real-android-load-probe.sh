@@ -84,10 +84,14 @@ public final class RealAndroidNativeLoadProbe{
         String[] pathEntries = libraryPath.isEmpty() ? new String[0] : libraryPath.split(File.pathSeparator);
         for(int i = 0; i < pathEntries.length; i++){
             File path = new File(pathEntries[i]);
+            File candidate = new File(path, "libsdl-arc.so");
             System.out.println("Runtime.java.library.path[" + i + "]=" + path.getAbsolutePath()
                     + " exists=" + path.exists()
                     + " directory=" + path.isDirectory()
                     + " readable=" + path.canRead());
+            System.out.println("Runtime.java.library.path[" + i + "].libsdl-arc.so=" + candidate.getAbsolutePath()
+                    + " exists=" + candidate.isFile()
+                    + " readable=" + candidate.canRead());
         }
 
         try{
