@@ -232,9 +232,20 @@ jobs:
           test -f desktop/build/libs/Mindustry.jar
           echo "Verified desktop/build/libs/Mindustry.jar"
 
+      - name: Package real Android JVM native load probe
+        shell: bash
+        run: bash scripts/android-jvm/task-03c-build-real-android-load-probe.sh desktop/build/libs/Mindustry.jar ci-artifacts/task03c/libsdl-arc.so
+
       - name: Probe Android JVM native loader boundary
         shell: bash
         run: bash scripts/android-jvm/task-03c-runtime-loader-probe.sh desktop/build/libs/Mindustry.jar
+
+      - name: Upload Android JVM native load probe
+        uses: actions/upload-artifact@v7
+        with:
+          name: Android-JVM-native-load-probe-${{ github.sha }}
+          path: ci-artifacts/android-jvm-load-probe
+          if-no-files-found: error
 
       - name: Upload desktop JAR
         uses: actions/upload-artifact@v7
