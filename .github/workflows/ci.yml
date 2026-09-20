@@ -232,6 +232,10 @@ jobs:
           test -f desktop/build/libs/Mindustry.jar
           echo "Verified desktop/build/libs/Mindustry.jar"
 
+      - name: Probe Android JVM native loader boundary
+        shell: bash
+        run: bash scripts/android-jvm/task-03c-runtime-loader-probe.sh desktop/build/libs/Mindustry.jar
+
       - name: Upload desktop JAR
         uses: actions/upload-artifact@v7
         with:
