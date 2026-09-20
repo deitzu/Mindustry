@@ -62,8 +62,8 @@ fi
 }
 echo "Arc revision verified by single late-stage Git query: $actual_arc"
 
-if [ ! -f "$SDL_VERSION_HEADER" ]; then
-  echo "== TASK 03C-DEBUG-14: obtain SDL $SDL_VERSION independently =="
+if ! git -C "$SDL_ROOT" rev-parse --verify HEAD >/dev/null 2>&1; then
+  echo "== TASK 03C-DEBUG-14: obtain authoritative SDL $SDL_VERSION checkout =="
   rm -rf "$SDL_ROOT"
   git clone --no-tags --depth=1 --branch "release-$SDL_VERSION" https://github.com/libsdl-org/SDL "$SDL_ROOT"
 fi
@@ -79,7 +79,7 @@ actual_sdl_commit="$(git -C "$SDL_ROOT" rev-parse HEAD)"
   exit 1
 }
 
-header_version="$(awk '/^#define SDL_MAJOR_VERSION[[:space:]]/ {major=$3} /^#define SDL_MINOR_VERSION[[:space:]]/ {minor=$3} /^#define SDL_PATCHLEVEL[[:space:]]/ {patch=$3} END {if(major == "" || minor == "" || patch == "") exit 1; print major "." minor "." patch}' "$SDL_ROOT/include/SDL2/SDL_version.h")"
+header_version="$(awk '/^#define SDL_MAJOR_VERSION[[:space:]]/ {major=$3} /^#define SDL_MINOR_VERSION[[:space:]]/ {minor=$3} /^#define SDL_PATCHLEVEL[[:space:]]/ {patch=$3} END {if(major == "" || minor == "" || patch == "") exit 1; print major "." minor "." patch}' "$SDL_VERSION_HEADER")"
 [ "$header_version" = "$SDL_VERSION" ] || {
   echo "::error::SDL version mismatch: expected $SDL_VERSION, got $header_version"
   exit 1
