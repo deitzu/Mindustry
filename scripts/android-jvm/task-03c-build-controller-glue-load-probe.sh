@@ -168,6 +168,88 @@ public final class AbsolutePathAndroidJniGlueLoadProbe{
         return out.toString();
     }
 
+
+    private static String classLoaderName(ClassLoader loader){
+        return loader == null ? "<null>" : loader.getClass().getName();
+    }
+
+    private static void printClassVisibility(String label, String className, ClassLoader loader){
+        System.out.println(label + "_LOADER_CLASS=" + classLoaderName(loader));
+
+        if(loader == null){
+            System.out.println(label + "_VISIBLE=false");
+            System.out.println(label + "_ERROR.type=java.lang.IllegalStateException");
+            System.out.println(label + "_ERROR.message=ClassLoader is null");
+            System.out.println(label + "_RESOURCE=<null-loader>");
+            return;
+        }
+
+        try{
+            Class<?> resolved = Class.forName(className, false, loader);
+            System.out.println(label + "_VISIBLE=true");
+
+            ClassLoader resolvedLoader = resolved.getClassLoader();
+            System.out.println(label + "_RESOLVED_LOADER_CLASS=" + classLoaderName(resolvedLoader));
+
+            try{
+                java.security.ProtectionDomain domain = resolved.getProtectionDomain();
+                java.security.CodeSource codeSource = domain == null ? null : domain.getCodeSource();
+                System.out.println(label + "_CODE_SOURCE=" +
+                    (codeSource == null || codeSource.getLocation() == null ? "<null>" : codeSource.getLocation()));
+            }catch(Throwable throwable){
+                System.out.println(label + "_CODE_SOURCE=<unavailable>");
+            }
+        }catch(Throwable throwable){
+            System.out.println(label + "_VISIBLE=false");
+            System.out.println(label + "_ERROR.type=" + throwable.getClass().getName());
+            System.out.println(label + "_ERROR.message=" + throwable.getMessage());
+        }
+
+        try{
+            java.net.URL resource = loader.getResource("org/libsdl/app/SDLJoystickHandler.class");
+            System.out.println(label + "_RESOURCE=" + (resource == null ? "<null>" : resource.toString()));
+        }catch(Throwable throwable){
+            System.out.println(label + "_RESOURCE=<error:" + throwable.getClass().getName() + ">");
+        }
+    }
+
+    private static void printClassLoaderVisibilityDiagnostics(){
+        final String className = "org.libsdl.app.SDLJoystickHandler";
+
+        System.out.println("ANDROID_JNI_CLASS_VISIBILITY_BEGIN");
+        System.out.println("ANDROID_JNI_CLASS_JAVA_CLASS_PATH=" + System.getProperty("java.class.path"));
+
+        try{
+            java.security.ProtectionDomain domain = AbsolutePathAndroidJniGlueLoadProbe.class.getProtectionDomain();
+            java.security.CodeSource codeSource = domain == null ? null : domain.getCodeSource();
+            System.out.println("ANDROID_JNI_CLASS_CODE_SOURCE=" +
+                (codeSource == null || codeSource.getLocation() == null ? "<null>" : codeSource.getLocation()));
+        }catch(Throwable throwable){
+            System.out.println("ANDROID_JNI_CLASS_CODE_SOURCE=<unavailable>");
+        }
+
+        ClassLoader systemLoader = ClassLoader.getSystemClassLoader();
+        printClassVisibility("ANDROID_JNI_CLASS_SYSTEM", className, systemLoader);
+
+        ClassLoader probeLoader = AbsolutePathAndroidJniGlueLoadProbe.class.getClassLoader();
+        printClassVisibility("ANDROID_JNI_CLASS_PROBE", className, probeLoader);
+
+        ClassLoader contextLoader = Thread.currentThread().getContextClassLoader();
+        printClassVisibility("ANDROID_JNI_CLASS_CONTEXT", className, contextLoader);
+
+        System.out.println("ANDROID_JNI_CLASS_RESOURCE_SYSTEM=" +
+            (systemLoader == null ? "<null-loader>" :
+                String.valueOf(systemLoader.getResource("org/libsdl/app/SDLJoystickHandler.class"))));
+        System.out.println("ANDROID_JNI_CLASS_RESOURCE_PROBE=" +
+            (probeLoader == null ? "<null-loader>" :
+                String.valueOf(probeLoader.getResource("org/libsdl/app/SDLJoystickHandler.class"))));
+        System.out.println("ANDROID_JNI_CLASS_RESOURCE_CONTEXT=" +
+            (contextLoader == null ? "<null-loader>" :
+                String.valueOf(contextLoader.getResource("org/libsdl/app/SDLJoystickHandler.class"))));
+
+        System.out.println("ANDROID_JNI_CLASS_VISIBILITY_END");
+    }
+
     public static void main(String[] args){
         System.out.println("PROBE_START");
         System.out.println("ANDROID_JNI_GLUE_LOAD_PROBE_BEGIN");
@@ -244,6 +326,8 @@ public final class AbsolutePathAndroidJniGlueLoadProbe{
             System.out.println("ANDROID_JNI_GLUE_SHA256=<unavailable>");
             printThrowable("ANDROID_JNI_GLUE_SHA256_ERROR", throwable);
         }
+
+        printClassLoaderVisibilityDiagnostics();
 
         System.out.println("ANDROID_JNI_GLUE_LOAD_BEGIN");
         try{
