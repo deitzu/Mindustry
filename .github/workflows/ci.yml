@@ -344,7 +344,6 @@ jobs:
             echo "ANDROID_NDK_ROOT=$ndk_dir"
             echo "NDK_HOME=$ndk_dir"
             echo "ANDROID_NDK_VERSION=${ANDROID_NDK_VERSION}"
-            echo "$ndk_dir"
           } >> "$GITHUB_ENV"
           echo "$ndk_dir" >> "$GITHUB_PATH"
 
