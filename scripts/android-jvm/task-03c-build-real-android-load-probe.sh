@@ -211,6 +211,11 @@ if not found:
 path.write_text("\n".join(out) + "\n", encoding="utf-8")
 PY
 
+# Replace the original manifest instead of adding a second META-INF/MANIFEST.MF.
+# Java's jar tool otherwise preserves the old attributes and emits duplicate-name warnings.
+if jar tf "$OUT_JAR" | grep -Fxq 'META-INF/MANIFEST.MF'; then
+  jar --delete --file "$OUT_JAR" META-INF/MANIFEST.MF
+fi
 jar ufm "$OUT_JAR" "$MANIFEST"
 jar uf "$OUT_JAR" -C "$CLS" androidjvm/probe/RealAndroidNativeLoadProbe.class
 jar uf "$OUT_JAR" -C "$RESOURCE_ROOT" android-jvm-probe/native/arm64-v8a/libsdl-arc.so
@@ -221,8 +226,11 @@ echo "Native library: $NATIVE_LIB"
 echo "Output JAR: $OUT_JAR"
 
 jar tf "$OUT_JAR" | grep -Fxq 'androidjvm/probe/RealAndroidNativeLoadProbe.class'
+echo "Verified probe class entry"
 jar tf "$OUT_JAR" | grep -Fxq 'android-jvm-probe/native/arm64-v8a/libsdl-arc.so'
-unzip -p "$OUT_JAR" META-INF/MANIFEST.MF | grep -Fxq 'Main-Class: androidjvm.probe.RealAndroidNativeLoadProbe'
+echo "Verified native resource entry"
+unzip -p "$OUT_JAR" META-INF/MANIFEST.MF | tr -d '\r' | grep -Fxq 'Main-Class: androidjvm.probe.RealAndroidNativeLoadProbe'
+echo "Verified probe Main-Class"
 
 sha256sum "$OUT_JAR" | tee "$OUT_DIR/Mindustry-android-jvm-load-probe.sha256"
 jar tf "$OUT_JAR" | grep -E '^(androidjvm/probe/RealAndroidNativeLoadProbe.class|android-jvm-probe/native/arm64-v8a/libsdl-arc.so)$' | tee "$OUT_DIR/package-entries.txt"
