@@ -13,6 +13,9 @@ SDL_ROOT="$ROOT/../SDL2-$SDL_VERSION"
 OUT_JAR="$OUT_DIR/Mindustry-android-jvm-controller-glue-load-probe.jar"
 RESOURCE_PATH="android-jvm-probe/native/arm64-v8a/libsdl-arc.so"
 ANDROID_JAVA_ROOT="$SDL_ROOT/android-project/app/src/main/java"
+ACTIVITY_SOURCE="$ANDROID_JAVA_ROOT/org/libsdl/app/SDLActivity.java"
+SDL_SOURCE="$ANDROID_JAVA_ROOT/org/libsdl/app/SDL.java"
+AUDIO_SOURCE="$ANDROID_JAVA_ROOT/org/libsdl/app/SDLAudioManager.java"
 CONTROLLER_SOURCE="$ANDROID_JAVA_ROOT/org/libsdl/app/SDLControllerManager.java"
 
 [ -f "$NATIVE_LIB" ] || {
@@ -65,7 +68,7 @@ mkdir -p "$OUT_DIR"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-PROBE_SRC="$TMP/AbsolutePathControllerGlueLoadProbe.java"
+PROBE_SRC="$TMP/AbsolutePathAndroidJniGlueLoadProbe.java"
 CLS="$TMP/classes"
 STAGE="$TMP/stage"
 MANIFEST="$TMP/MANIFEST.MF"
@@ -82,7 +85,7 @@ import java.io.InputStream;
 import java.security.MessageDigest;
 import java.util.Locale;
 
-public final class AbsolutePathControllerGlueLoadProbe{
+public final class AbsolutePathAndroidJniGlueLoadProbe{
     private static void printThrowable(String label, Throwable throwable){
         System.out.println(label + ".type=" + throwable.getClass().getName());
         System.out.println(label + ".message=" + throwable.getMessage());
@@ -118,19 +121,19 @@ public final class AbsolutePathControllerGlueLoadProbe{
 
     public static void main(String[] args){
         System.out.println("PROBE_START");
-        System.out.println("CONTROLLER_GLUE_LOAD_PROBE_BEGIN");
+        System.out.println("ANDROID_JNI_GLUE_LOAD_PROBE_BEGIN");
 
         String resourcePath = "/android-jvm-probe/native/arm64-v8a/libsdl-arc.so";
-        System.out.println("CONTROLLER_GLUE_NATIVE_RESOURCE=" + resourcePath);
+        System.out.println("ANDROID_JNI_GLUE_NATIVE_RESOURCE=" + resourcePath);
         System.out.println("Runtime.java.io.tmpdir=" + System.getProperty("java.io.tmpdir"));
         System.out.println("Runtime.java.library.path=" + System.getProperty("java.library.path"));
         System.out.println("Runtime.LD_LIBRARY_PATH=" + System.getenv("LD_LIBRARY_PATH"));
 
         String tmpDirProperty = System.getProperty("java.io.tmpdir");
         if(tmpDirProperty == null || tmpDirProperty.isEmpty()){
-            System.out.println("CONTROLLER_GLUE_LOAD_FAIL");
-            System.out.println("CONTROLLER_GLUE_LOAD_ERROR.type=java.lang.IllegalStateException");
-            System.out.println("CONTROLLER_GLUE_LOAD_ERROR.message=java.io.tmpdir is missing");
+            System.out.println("ANDROID_JNI_GLUE_LOAD_FAIL");
+            System.out.println("ANDROID_JNI_GLUE_LOAD_ERROR.type=java.lang.IllegalStateException");
+            System.out.println("ANDROID_JNI_GLUE_LOAD_ERROR.message=java.io.tmpdir is missing");
             System.exit(47);
             return;
         }
@@ -145,16 +148,16 @@ public final class AbsolutePathControllerGlueLoadProbe{
                 throw new IllegalStateException("Unable to create extraction directory: " + extractDir);
             }
         }catch(Throwable throwable){
-            System.out.println("CONTROLLER_GLUE_LOAD_FAIL");
-            printThrowable("CONTROLLER_GLUE_LOAD_ERROR", throwable);
+            System.out.println("ANDROID_JNI_GLUE_LOAD_FAIL");
+            printThrowable("ANDROID_JNI_GLUE_LOAD_ERROR", throwable);
             System.exit(47);
             return;
         }
 
         File target = new File(extractDir, "libsdl-arc.so").getAbsoluteFile();
-        System.out.println("CONTROLLER_GLUE_LOAD_PATH=" + target.getAbsolutePath());
+        System.out.println("ANDROID_JNI_GLUE_LOAD_PATH=" + target.getAbsolutePath());
 
-        try(InputStream input = AbsolutePathControllerGlueLoadProbe.class.getResourceAsStream(resourcePath)){
+        try(InputStream input = AbsolutePathAndroidJniGlueLoadProbe.class.getResourceAsStream(resourcePath)){
             if(input == null){
                 throw new IllegalStateException("Embedded native resource not found: " + resourcePath);
             }
@@ -167,94 +170,96 @@ public final class AbsolutePathControllerGlueLoadProbe{
                 }
             }
         }catch(Throwable throwable){
-            System.out.println("CONTROLLER_GLUE_LOAD_FAIL");
-            printThrowable("CONTROLLER_GLUE_LOAD_ERROR", throwable);
+            System.out.println("ANDROID_JNI_GLUE_LOAD_FAIL");
+            printThrowable("ANDROID_JNI_GLUE_LOAD_ERROR", throwable);
             System.exit(47);
             return;
         }
 
-        System.out.println("CONTROLLER_GLUE_FILE_EXISTS=" + target.exists());
-        System.out.println("CONTROLLER_GLUE_FILE_REGULAR=" + target.isFile());
-        System.out.println("CONTROLLER_GLUE_FILE_READABLE=" + target.canRead());
-        System.out.println("CONTROLLER_GLUE_FILE_SIZE=" + target.length());
+        System.out.println("ANDROID_JNI_GLUE_FILE_EXISTS=" + target.exists());
+        System.out.println("ANDROID_JNI_GLUE_FILE_REGULAR=" + target.isFile());
+        System.out.println("ANDROID_JNI_GLUE_FILE_READABLE=" + target.canRead());
+        System.out.println("ANDROID_JNI_GLUE_FILE_SIZE=" + target.length());
 
         if(!target.exists() || !target.isFile() || !target.canRead() || target.length() <= 0){
-            System.out.println("CONTROLLER_GLUE_LOAD_FAIL");
-            System.out.println("CONTROLLER_GLUE_LOAD_ERROR.type=java.lang.IllegalStateException");
-            System.out.println("CONTROLLER_GLUE_LOAD_ERROR.message=Extracted native file failed filesystem validation");
+            System.out.println("ANDROID_JNI_GLUE_LOAD_FAIL");
+            System.out.println("ANDROID_JNI_GLUE_LOAD_ERROR.type=java.lang.IllegalStateException");
+            System.out.println("ANDROID_JNI_GLUE_LOAD_ERROR.message=Extracted native file failed filesystem validation");
             System.exit(47);
             return;
         }
 
         try{
-            System.out.println("CONTROLLER_GLUE_SHA256=" + sha256(target));
+            System.out.println("ANDROID_JNI_GLUE_SHA256=" + sha256(target));
         }catch(Throwable throwable){
-            System.out.println("CONTROLLER_GLUE_SHA256=<unavailable>");
-            printThrowable("CONTROLLER_GLUE_SHA256_ERROR", throwable);
+            System.out.println("ANDROID_JNI_GLUE_SHA256=<unavailable>");
+            printThrowable("ANDROID_JNI_GLUE_SHA256_ERROR", throwable);
         }
 
-        System.out.println("CONTROLLER_GLUE_LOAD_BEGIN");
+        System.out.println("ANDROID_JNI_GLUE_LOAD_BEGIN");
         try{
             System.load(target.getAbsolutePath());
-            System.out.println("CONTROLLER_GLUE_LOAD_PASS");
+            System.out.println("ANDROID_JNI_GLUE_LOAD_PASS");
             System.out.println("PROBE_END");
         }catch(Throwable throwable){
-            System.out.println("CONTROLLER_GLUE_LOAD_FAIL");
-            printThrowable("CONTROLLER_GLUE_LOAD_ERROR", throwable);
+            System.out.println("ANDROID_JNI_GLUE_LOAD_FAIL");
+            printThrowable("ANDROID_JNI_GLUE_LOAD_ERROR", throwable);
             System.exit(48);
         }
     }
 }
 JAVA
 
-echo "== TASK 03C-DEBUG-14: compile SDL 2.32.8 Android Java glue source =="
-javac -source 8 -target 8 -proc:none \
-  -cp "$ANDROID_JAR" \
-  -sourcepath "$ANDROID_JAVA_ROOT" \
-  -d "$CLS" \
-  "$CONTROLLER_SOURCE" \
-  "$PROBE_SRC"
+echo "== TASK 03C-DEBUG-14: compile exact SDL 2.32.8 Android JNI glue sources =="
+for source in "$ACTIVITY_SOURCE" "$SDL_SOURCE" "$AUDIO_SOURCE" "$CONTROLLER_SOURCE"; do
+  [ -f "$source" ] || {
+    echo "::error::Required SDL Android Java source not found: $source"
+    exit 1
+  }
+done
 
-echo "== TASK 03C-DEBUG-14: identify classes defined by SDLControllerManager.java =="
-mapfile -t controller_classes < <(
-  grep -E '^(public )?(abstract )?class [A-Za-z0-9_]+' "$CONTROLLER_SOURCE" |
-  sed -E 's/^(public |abstract )?class ([A-Za-z0-9_]+).*/\2/' |
-  sort -u
-)
-
-[ "${#controller_classes[@]}" -gt 0 ] || {
-  echo "::error::No top-level classes were identified in SDLControllerManager.java"
+grep -Fq 'class SDLInputConnection extends BaseInputConnection' "$ACTIVITY_SOURCE" || {
+  echo "::error::SDLInputConnection top-level source declaration missing from SDLActivity.java"
   exit 1
 }
 
-for class_name in "${controller_classes[@]}"; do
+javac -source 8 -target 8 -proc:none   -cp "$ANDROID_JAR"   -sourcepath "$ANDROID_JAVA_ROOT"   -d "$CLS"   "$ACTIVITY_SOURCE" "$SDL_SOURCE" "$AUDIO_SOURCE" "$CONTROLLER_SOURCE"   "$PROBE_SRC"
+
+echo "== TASK 03C-DEBUG-14: stage only direct JNI_OnLoad class dependencies =="
+echo "== TASK 03C-DEBUG-14: stage only direct JNI_OnLoad class dependencies =="
+
+DIRECT_CLASSES=(
+  SDLActivity
+  SDLInputConnection
+  SDLAudioManager
+  SDLControllerManager
+)
+
+for class_name in "${DIRECT_CLASSES[@]}"; do
   class_file="$CLS/org/libsdl/app/$class_name.class"
   [ -f "$class_file" ] || {
-    echo "::error::Expected compiled class missing: $class_file"
+    echo "::error::Expected direct JNI_OnLoad class missing: $class_file"
     exit 1
   }
   cp "$class_file" "$STAGE/org/libsdl/app/"
-  while IFS= read -r nested; do
-    cp "$nested" "$STAGE/org/libsdl/app/"
-  done < <(find "$CLS/org/libsdl/app" -maxdepth 1 -type f -name "$class_name\$*.class" -print)
 done
 
-cp "$CLS/androidjvm/probe/AbsolutePathControllerGlueLoadProbe.class" "$STAGE/androidjvm/probe/"
+cp "$CLS/androidjvm/probe/AbsolutePathAndroidJniGlueLoadProbe.class" "$STAGE/androidjvm/probe/"
 
 cat > "$MANIFEST" <<'EOF'
 Manifest-Version: 1.0
-Main-Class: androidjvm.probe.AbsolutePathControllerGlueLoadProbe
+Main-Class: androidjvm.probe.AbsolutePathAndroidJniGlueLoadProbe
 EOF
 
 cp "$NATIVE_LIB" "$STAGE/$RESOURCE_PATH"
 
 jar cfm "$OUT_JAR" "$MANIFEST" \
-  -C "$STAGE" androidjvm/probe/AbsolutePathControllerGlueLoadProbe.class \
+  -C "$STAGE" androidjvm/probe/AbsolutePathAndroidJniGlueLoadProbe.class \
   -C "$STAGE" org/libsdl/app \
   -C "$STAGE" android-jvm-probe/native/arm64-v8a/libsdl-arc.so
 
 echo "== TASK 03C-DEBUG-14: verify diagnostic package =="
-jar tf "$OUT_JAR" | grep -Fxq 'androidjvm/probe/AbsolutePathControllerGlueLoadProbe.class'
+jar tf "$OUT_JAR" | grep -Fxq 'androidjvm/probe/AbsolutePathAndroidJniGlueLoadProbe.class'
 jar tf "$OUT_JAR" | grep -Fxq "$RESOURCE_PATH"
 grep -Fxq 'org/libsdl/app/SDLControllerManager.class' < <(jar tf "$OUT_JAR")
 
@@ -267,7 +272,7 @@ while IFS= read -r entry; do
   esac
 done < <(jar tf "$OUT_JAR")
 
-unzip -p "$OUT_JAR" META-INF/MANIFEST.MF | tr -d '\r' | grep -Fxq 'Main-Class: androidjvm.probe.AbsolutePathControllerGlueLoadProbe'
+unzip -p "$OUT_JAR" META-INF/MANIFEST.MF | tr -d '\r' | grep -Fxq 'Main-Class: androidjvm.probe.AbsolutePathAndroidJniGlueLoadProbe'
 
 native_sha="$(sha256sum "$NATIVE_LIB" | awk '{print $1}')"
 embedded_sha="$(unzip -p "$OUT_JAR" "$RESOURCE_PATH" | sha256sum | awk '{print $1}')"
@@ -278,14 +283,11 @@ embedded_sha="$(unzip -p "$OUT_JAR" "$RESOURCE_PATH" | sha256sum | awk '{print $
 
 echo "Arc revision: $actual_arc"
 echo "SDL source version: $header_version"
-echo "Android Java source: $CONTROLLER_SOURCE"
-echo "Android API jar: $ANDROID_JAR"
-echo "Native SHA-256: $native_sha"
-echo "Embedded native SHA-256: $embedded_sha"
-echo "SDLControllerManager.java top-level class files:"
-printf '  %s\n' "${controller_classes[@]}"
+echo "Android Java sources:"
+printf '  %s\\n' "$ACTIVITY_SOURCE" "$SDL_SOURCE" "$AUDIO_SOURCE" "$CONTROLLER_SOURCE"
+echo "Direct JNI_OnLoad Java classes:"
+printf '  %s\\n' "${DIRECT_CLASSES[@]}"
 echo "Verified probe class entry"
-echo "Verified SDLControllerManager.java class set only"
+echo "Verified exact four direct JNI_OnLoad classes only"
 echo "Verified real libsdl-arc.so resource"
-echo "Verified no SDLActivity/SDL/SDLAudioManager/SDLInputConnection class packaged"
-echo "Controller-glue absolute-load diagnostic package: PASS"
+echo "Android JNI glue absolute-load diagnostic package: PASS"
