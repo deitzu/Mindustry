@@ -22,7 +22,7 @@ SDL_SOURCE="$ANDROID_JAVA_ROOT/org/libsdl/app/SDL.java"
 AUDIO_SOURCE="$ANDROID_JAVA_ROOT/org/libsdl/app/SDLAudioManager.java"
 CONTROLLER_SOURCE="$ANDROID_JAVA_ROOT/org/libsdl/app/SDLControllerManager.java"
 DIRECT_CLASSES=(SDLActivity SDLInputConnection SDLAudioManager SDLControllerManager)
-EXTRA_CLASSES=(SDLJoystickHandler)
+EXTRA_CLASSES=(SDLJoystickHandler SDLJoystickHandler_API16 SDLJoystickHandler_API19)
 PACKAGE_CLASSES=("${DIRECT_CLASSES[@]}" "${EXTRA_CLASSES[@]}")
 
 [ -f "$NATIVE_LIB" ] || {
@@ -96,6 +96,16 @@ done
 
 grep -Eq "^[[:space:]]*class[[:space:]]+SDLJoystickHandler[[:space:]]*[{]" "$CONTROLLER_SOURCE" || {
   echo "::error::Expected SDLJoystickHandler class declaration not found: $CONTROLLER_SOURCE"
+  exit 1
+}
+
+grep -Eq "^[[:space:]]*class[[:space:]]+SDLJoystickHandler_API16[[:space:]]+extends[[:space:]]+SDLJoystickHandler[[:space:]]*[{]" "$CONTROLLER_SOURCE" || {
+  echo "::error::Expected SDLJoystickHandler_API16 extends SDLJoystickHandler declaration not found: $CONTROLLER_SOURCE"
+  exit 1
+}
+
+grep -Eq "^[[:space:]]*class[[:space:]]+SDLJoystickHandler_API19[[:space:]]+extends[[:space:]]+SDLJoystickHandler_API16[[:space:]]*[{]" "$CONTROLLER_SOURCE" || {
+  echo "::error::Expected SDLJoystickHandler_API19 extends SDLJoystickHandler_API16 declaration not found: $CONTROLLER_SOURCE"
   exit 1
 }
 
@@ -355,7 +365,7 @@ javac -source 8 -target 8 -proc:none \
   "$CONTROLLER_SOURCE" \
   "$PROBE_SRC"
 
-echo "== TASK 03C-DEBUG-16: stage DEBUG-14 classes plus exactly SDLJoystickHandler =="
+echo "== TASK 03C-DEBUG-17: stage DEBUG-16A classes plus exactly SDLJoystickHandler_API16 and SDLJoystickHandler_API19 =="
 
 for class_name in "${PACKAGE_CLASSES[@]}"; do
   class_file="$CLS/org/libsdl/app/$class_name.class"
@@ -396,6 +406,8 @@ expected_java_classes=(
   'org/libsdl/app/SDLControllerManager.class'
   'org/libsdl/app/SDLInputConnection.class'
   'org/libsdl/app/SDLJoystickHandler.class'
+  'org/libsdl/app/SDLJoystickHandler_API16.class'
+  'org/libsdl/app/SDLJoystickHandler_API19.class'
 )
 
 diff -u \
@@ -422,12 +434,12 @@ echo "SDL Android Java source files:"
 printf '  %s\n' "$ACTIVITY_SOURCE" "$SDL_SOURCE" "$AUDIO_SOURCE" "$CONTROLLER_SOURCE"
 echo "DEBUG-14 direct JNI_OnLoad Java classes:"
 printf '  %s\n' "${DIRECT_CLASSES[@]}"
-echo "DEBUG-16 additional Java class:"
+echo "DEBUG-17 additional Java classes:"
 printf '  %s\n' "${EXTRA_CLASSES[@]}"
 echo "SDLInputConnection source declaration: SDLActivity.java (top-level class)"
-echo "SDLJoystickHandler source location: SDLControllerManager.java (top-level package-private class)"
+echo "SDLJoystickHandler/API16/API19 source location: SDLControllerManager.java (top-level package-private classes)"
 echo "Native SHA-256: $native_sha"
 echo "Embedded native SHA-256: $embedded_sha"
-echo "Verified DEBUG-14 four direct JNI_OnLoad classes plus exactly SDLJoystickHandler"
+echo "Verified DEBUG-14 four direct JNI_OnLoad classes plus exactly SDLJoystickHandler, SDLJoystickHandler_API16, SDLJoystickHandler_API19"
 echo "Verified real libsdl-arc.so resource"
 echo "Android JNI glue absolute-load diagnostic package: PASS"
