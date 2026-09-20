@@ -22,7 +22,7 @@ SDL_SOURCE="$ANDROID_JAVA_ROOT/org/libsdl/app/SDL.java"
 AUDIO_SOURCE="$ANDROID_JAVA_ROOT/org/libsdl/app/SDLAudioManager.java"
 CONTROLLER_SOURCE="$ANDROID_JAVA_ROOT/org/libsdl/app/SDLControllerManager.java"
 DIRECT_CLASSES=(SDLActivity SDLInputConnection SDLAudioManager SDLControllerManager)
-EXTRA_CLASSES=(SDLJoystickHandler SDLJoystickHandler_API16 SDLJoystickHandler_API19)
+EXTRA_CLASSES=(SDLJoystickHandler SDLJoystickHandler_API16 SDLJoystickHandler_API19 SDLHapticHandler SDLHapticHandler_API26)
 PACKAGE_CLASSES=("${DIRECT_CLASSES[@]}" "${EXTRA_CLASSES[@]}")
 
 [ -f "$NATIVE_LIB" ] || {
@@ -109,6 +109,16 @@ grep -Eq "^[[:space:]]*class[[:space:]]+SDLJoystickHandler_API19[[:space:]]+exte
   exit 1
 }
 
+grep -Eq "^[[:space:]]*class[[:space:]]+SDLHapticHandler[[:space:]]*[{]" "$CONTROLLER_SOURCE" || {
+  echo "::error::Expected SDLHapticHandler class declaration not found: $CONTROLLER_SOURCE"
+  exit 1
+}
+
+grep -Eq "^[[:space:]]*class[[:space:]]+SDLHapticHandler_API26[[:space:]]+extends[[:space:]]+SDLHapticHandler[[:space:]]*[{]" "$CONTROLLER_SOURCE" || {
+  echo "::error::Expected SDLHapticHandler_API26 extends SDLHapticHandler declaration not found: $CONTROLLER_SOURCE"
+  exit 1
+}
+
 SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
 [ -n "$SDK_ROOT" ] || {
   echo "::error::Android SDK root is not configured"
@@ -183,7 +193,7 @@ public final class AbsolutePathAndroidJniGlueLoadProbe{
         return loader == null ? "<null>" : loader.getClass().getName();
     }
 
-    private static void printClassVisibility(String label, String className, ClassLoader loader){
+    private static void printClassVisibility(String label, String className, String resourceName, ClassLoader loader){
         System.out.println(label + "_LOADER_CLASS=" + classLoaderName(loader));
 
         if(loader == null){
@@ -216,7 +226,7 @@ public final class AbsolutePathAndroidJniGlueLoadProbe{
         }
 
         try{
-            java.net.URL resource = loader.getResource("org/libsdl/app/SDLJoystickHandler.class");
+            java.net.URL resource = loader.getResource(resourceName);
             System.out.println(label + "_RESOURCE=" + (resource == null ? "<null>" : resource.toString()));
         }catch(Throwable throwable){
             System.out.println(label + "_RESOURCE=<error:" + throwable.getClass().getName() + ">");
@@ -224,7 +234,12 @@ public final class AbsolutePathAndroidJniGlueLoadProbe{
     }
 
     private static void printClassLoaderVisibilityDiagnostics(){
-        final String className = "org.libsdl.app.SDLJoystickHandler";
+        final String joystickClassName = "org.libsdl.app.SDLJoystickHandler";
+        final String joystickResourceName = "org/libsdl/app/SDLJoystickHandler.class";
+        final String hapticClassName = "org.libsdl.app.SDLHapticHandler";
+        final String hapticResourceName = "org/libsdl/app/SDLHapticHandler.class";
+        final String hapticApi26ClassName = "org.libsdl.app.SDLHapticHandler_API26";
+        final String hapticApi26ResourceName = "org/libsdl/app/SDLHapticHandler_API26.class";
 
         System.out.println("ANDROID_JNI_CLASS_VISIBILITY_BEGIN");
         System.out.println("ANDROID_JNI_CLASS_JAVA_CLASS_PATH=" + System.getProperty("java.class.path"));
@@ -239,23 +254,47 @@ public final class AbsolutePathAndroidJniGlueLoadProbe{
         }
 
         ClassLoader systemLoader = ClassLoader.getSystemClassLoader();
-        printClassVisibility("ANDROID_JNI_CLASS_SYSTEM", className, systemLoader);
+        printClassVisibility("ANDROID_JNI_CLASS_SYSTEM", joystickClassName, joystickResourceName, systemLoader);
+        printClassVisibility("ANDROID_JNI_HAPTIC_BASE_SYSTEM", hapticClassName, hapticResourceName, systemLoader);
+        printClassVisibility("ANDROID_JNI_HAPTIC_API26_SYSTEM", hapticApi26ClassName, hapticApi26ResourceName, systemLoader);
 
         ClassLoader probeLoader = AbsolutePathAndroidJniGlueLoadProbe.class.getClassLoader();
-        printClassVisibility("ANDROID_JNI_CLASS_PROBE", className, probeLoader);
+        printClassVisibility("ANDROID_JNI_CLASS_PROBE", joystickClassName, joystickResourceName, probeLoader);
+        printClassVisibility("ANDROID_JNI_HAPTIC_BASE_PROBE", hapticClassName, hapticResourceName, probeLoader);
+        printClassVisibility("ANDROID_JNI_HAPTIC_API26_PROBE", hapticApi26ClassName, hapticApi26ResourceName, probeLoader);
 
         ClassLoader contextLoader = Thread.currentThread().getContextClassLoader();
-        printClassVisibility("ANDROID_JNI_CLASS_CONTEXT", className, contextLoader);
+        printClassVisibility("ANDROID_JNI_CLASS_CONTEXT", joystickClassName, joystickResourceName, contextLoader);
+        printClassVisibility("ANDROID_JNI_HAPTIC_BASE_CONTEXT", hapticClassName, hapticResourceName, contextLoader);
+        printClassVisibility("ANDROID_JNI_HAPTIC_API26_CONTEXT", hapticApi26ClassName, hapticApi26ResourceName, contextLoader);
 
         System.out.println("ANDROID_JNI_CLASS_RESOURCE_SYSTEM=" +
             (systemLoader == null ? "<null-loader>" :
-                String.valueOf(systemLoader.getResource("org/libsdl/app/SDLJoystickHandler.class"))));
+                String.valueOf(systemLoader.getResource(joystickResourceName))));
         System.out.println("ANDROID_JNI_CLASS_RESOURCE_PROBE=" +
             (probeLoader == null ? "<null-loader>" :
-                String.valueOf(probeLoader.getResource("org/libsdl/app/SDLJoystickHandler.class"))));
+                String.valueOf(probeLoader.getResource(joystickResourceName))));
         System.out.println("ANDROID_JNI_CLASS_RESOURCE_CONTEXT=" +
             (contextLoader == null ? "<null-loader>" :
-                String.valueOf(contextLoader.getResource("org/libsdl/app/SDLJoystickHandler.class"))));
+                String.valueOf(contextLoader.getResource(joystickResourceName))));
+        System.out.println("ANDROID_JNI_HAPTIC_BASE_RESOURCE_SYSTEM=" +
+            (systemLoader == null ? "<null-loader>" :
+                String.valueOf(systemLoader.getResource(hapticResourceName))));
+        System.out.println("ANDROID_JNI_HAPTIC_BASE_RESOURCE_PROBE=" +
+            (probeLoader == null ? "<null-loader>" :
+                String.valueOf(probeLoader.getResource(hapticResourceName))));
+        System.out.println("ANDROID_JNI_HAPTIC_BASE_RESOURCE_CONTEXT=" +
+            (contextLoader == null ? "<null-loader>" :
+                String.valueOf(contextLoader.getResource(hapticResourceName))));
+        System.out.println("ANDROID_JNI_HAPTIC_API26_RESOURCE_SYSTEM=" +
+            (systemLoader == null ? "<null-loader>" :
+                String.valueOf(systemLoader.getResource(hapticApi26ResourceName))));
+        System.out.println("ANDROID_JNI_HAPTIC_API26_RESOURCE_PROBE=" +
+            (probeLoader == null ? "<null-loader>" :
+                String.valueOf(probeLoader.getResource(hapticApi26ResourceName))));
+        System.out.println("ANDROID_JNI_HAPTIC_API26_RESOURCE_CONTEXT=" +
+            (contextLoader == null ? "<null-loader>" :
+                String.valueOf(contextLoader.getResource(hapticApi26ResourceName))));
 
         System.out.println("ANDROID_JNI_CLASS_VISIBILITY_END");
     }
@@ -365,7 +404,7 @@ javac -source 8 -target 8 -proc:none \
   "$CONTROLLER_SOURCE" \
   "$PROBE_SRC"
 
-echo "== TASK 03C-DEBUG-17: stage DEBUG-16A classes plus exactly SDLJoystickHandler_API16 and SDLJoystickHandler_API19 =="
+echo "== TASK 03C-DEBUG-18: stage DEBUG-17 classes plus exactly SDLHapticHandler and SDLHapticHandler_API26 =="
 
 for class_name in "${PACKAGE_CLASSES[@]}"; do
   class_file="$CLS/org/libsdl/app/$class_name.class"
@@ -408,11 +447,18 @@ expected_java_classes=(
   'org/libsdl/app/SDLJoystickHandler.class'
   'org/libsdl/app/SDLJoystickHandler_API16.class'
   'org/libsdl/app/SDLJoystickHandler_API19.class'
+  'org/libsdl/app/SDLHapticHandler.class'
+  'org/libsdl/app/SDLHapticHandler_API26.class'
 )
 
 diff -u \
   <(printf '%s\n' "${expected_java_classes[@]}") \
   <(printf '%s\n' "${packaged_java_classes[@]}")
+
+if printf '%s\n' "${packaged_java_classes[@]}" | grep -Fxq 'org/libsdl/app/SDLHapticHandler$SDLHaptic.class'; then
+  echo "::error::Speculative nested SDLHapticHandler$SDLHaptic.class was packaged"
+  exit 1
+fi
 
 unzip -p "$OUT_JAR" META-INF/MANIFEST.MF |
   tr -d '\r' |
@@ -434,12 +480,12 @@ echo "SDL Android Java source files:"
 printf '  %s\n' "$ACTIVITY_SOURCE" "$SDL_SOURCE" "$AUDIO_SOURCE" "$CONTROLLER_SOURCE"
 echo "DEBUG-14 direct JNI_OnLoad Java classes:"
 printf '  %s\n' "${DIRECT_CLASSES[@]}"
-echo "DEBUG-17 additional Java classes:"
+echo "DEBUG-18 additional Java classes:"
 printf '  %s\n' "${EXTRA_CLASSES[@]}"
 echo "SDLInputConnection source declaration: SDLActivity.java (top-level class)"
-echo "SDLJoystickHandler/API16/API19 source location: SDLControllerManager.java (top-level package-private classes)"
+echo "SDLJoystickHandler/API16/API19 and SDLHapticHandler/API26 source location: SDLControllerManager.java (top-level package-private classes)"
 echo "Native SHA-256: $native_sha"
 echo "Embedded native SHA-256: $embedded_sha"
-echo "Verified DEBUG-14 four direct JNI_OnLoad classes plus exactly SDLJoystickHandler, SDLJoystickHandler_API16, SDLJoystickHandler_API19"
+echo "Verified DEBUG-17 seven SDL classes plus exactly SDLHapticHandler and SDLHapticHandler_API26"
 echo "Verified real libsdl-arc.so resource"
 echo "Android JNI glue absolute-load diagnostic package: PASS"
