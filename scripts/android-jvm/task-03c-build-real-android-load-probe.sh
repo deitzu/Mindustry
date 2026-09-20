@@ -211,11 +211,32 @@ if not found:
 path.write_text("\n".join(out) + "\n", encoding="utf-8")
 PY
 
-# Replace the original manifest instead of adding a second META-INF/MANIFEST.MF.
-# Java's jar tool otherwise preserves the old attributes and emits duplicate-name warnings.
-if jar tf "$OUT_JAR" | grep -Fxq 'META-INF/MANIFEST.MF'; then
-  jar --delete --file "$OUT_JAR" META-INF/MANIFEST.MF
-fi
+# Remove the original manifest before adding the probe manifest.
+# JDK jar has no portable delete mode on the runner, so rebuild the ZIP/JAR without
+# META-INF/MANIFEST.MF using Python's standard-library zipfile module.
+python3 - "$OUT_JAR" <<'PY'
+from pathlib import Path
+import os
+import sys
+import tempfile
+import zipfile
+
+jar_path = Path(sys.argv[1])
+fd, tmp_name = tempfile.mkstemp(prefix=jar_path.name + ".", suffix=".tmp", dir=jar_path.parent)
+os.close(fd)
+tmp_path = Path(tmp_name)
+
+try:
+    with zipfile.ZipFile(jar_path, "r") as source, zipfile.ZipFile(tmp_path, "w") as target:
+        for info in source.infolist():
+            if info.filename == "META-INF/MANIFEST.MF":
+                continue
+            target.writestr(info, source.read(info.filename))
+    os.replace(tmp_path, jar_path)
+finally:
+    if tmp_path.exists():
+        tmp_path.unlink()
+
 jar ufm "$OUT_JAR" "$MANIFEST"
 jar uf "$OUT_JAR" -C "$CLS" androidjvm/probe/RealAndroidNativeLoadProbe.class
 jar uf "$OUT_JAR" -C "$RESOURCE_ROOT" android-jvm-probe/native/arm64-v8a/libsdl-arc.so
