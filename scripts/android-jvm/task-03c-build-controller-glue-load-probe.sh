@@ -6,6 +6,7 @@ OUT_DIR="${2:-ci-artifacts/android-jvm-android-jni-glue-load-probe}"
 
 ARC_EXPECTED="8eb00ffff0126d0576c67df46f99b8f6bccd96fe"
 SDL_VERSION="2.32.8"
+SDL_URL="https://github.com/libsdl-org/SDL/releases/download/release-2.32.8/SDL2-2.32.8.tar.gz"
 
 ROOT="$(git rev-parse --show-toplevel)"
 ARC_DIR="$ROOT/../Arc"
@@ -36,8 +37,16 @@ actual_arc="$(git -C "$ARC_DIR" rev-parse HEAD)"
   exit 1
 }
 
+if [ ! -f "$SDL_ROOT/include/SDL2/SDL_version.h" ]; then
+  archive="$ROOT/../SDL2-$SDL_VERSION.tar.gz"
+  echo "== TASK 03C-DEBUG-14: obtain SDL $SDL_VERSION independently =="
+  curl -fsSL --retry 3 --retry-all-errors "$SDL_URL" -o "$archive"
+  rm -rf "$SDL_ROOT"
+  tar -xzf "$archive" -C "$ROOT/.."
+fi
+
 [ -f "$SDL_ROOT/include/SDL2/SDL_version.h" ] || {
-  echo "::error::SDL headers not found: $SDL_ROOT"
+  echo "::error::SDL headers not found after extraction: $SDL_ROOT"
   exit 1
 }
 
