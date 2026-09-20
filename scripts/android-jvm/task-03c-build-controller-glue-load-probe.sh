@@ -33,6 +33,49 @@ DIRECT_CLASSES=(SDLActivity SDLInputConnection SDLAudioManager SDLControllerMana
   exit 1
 }
 
+echo "== DEBUG-14-CI-01: inspect Arc repository state before late Git check =="
+pwd -P
+echo "ROOT=$ROOT"
+echo "ARC_DIR=$ARC_DIR"
+printf 'ROOT_TYPE='
+stat -c '%F' "$ROOT" 2>&1 || true
+printf 'ARC_DIR_TYPE='
+stat -c '%F' "$ARC_DIR" 2>&1 || true
+if [ -d "$ARC_DIR" ]; then
+  echo "ARC_DIR_EXISTS=true"
+  ls -lad "$ARC_DIR"
+  echo "ARC_EXPECTED_FILES:"
+  for expected in build.gradle gradle.properties settings.gradle; do
+    if [ -e "$ARC_DIR/$expected" ]; then echo "  $expected=present"; else echo "  $expected=missing"; fi
+  done
+else
+  echo "::error::ARC_DIR_EXISTS=false: $ARC_DIR"
+  exit 1
+fi
+if [ -e "$ARC_DIR/.git" ]; then
+  echo "ARC_GIT_METADATA_EXISTS=true"
+  stat -c 'ARC_GIT_METADATA_TYPE=%F' "$ARC_DIR/.git" 2>&1 || true
+  ls -lad "$ARC_DIR/.git" 2>&1 || true
+  if [ -d "$ARC_DIR/.git" ]; then
+    ls -la "$ARC_DIR/.git" | head -n 20
+    if [ -f "$ARC_DIR/.git/HEAD" ]; then echo "ARC_GIT_HEAD_FILE=present"; else echo "ARC_GIT_HEAD_FILE=missing"; fi
+    if [ -f "$ARC_DIR/.git/config" ]; then echo "ARC_GIT_CONFIG_FILE=present"; else echo "ARC_GIT_CONFIG_FILE=missing"; fi
+  fi
+else
+  echo "::error::ARC_GIT_METADATA_EXISTS=false: $ARC_DIR/.git"
+fi
+
+echo "== DEBUG-14-CI-01: test Arc Git repository explicitly =="
+if ! git -C "$ARC_DIR" rev-parse --show-toplevel; then
+  echo "::error::Arc Git root resolution failed at: $ARC_DIR"
+  exit 1
+fi
+if ! git -C "$ARC_DIR" rev-parse HEAD; then
+  echo "::error::Arc HEAD resolution failed at: $ARC_DIR"
+  exit 1
+fi
+
+echo "== DEBUG-14-CI-01: Arc repository state check passed =="
 actual_arc="$(git -C "$ARC_DIR" rev-parse HEAD)"
 [ "$actual_arc" = "$ARC_EXPECTED" ] || {
   echo "::error::Arc revision mismatch: expected $ARC_EXPECTED, got $actual_arc"
