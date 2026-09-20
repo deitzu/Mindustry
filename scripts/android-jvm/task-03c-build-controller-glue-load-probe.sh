@@ -443,12 +443,12 @@ expected_java_classes=(
   'org/libsdl/app/SDLActivity.class'
   'org/libsdl/app/SDLAudioManager.class'
   'org/libsdl/app/SDLControllerManager.class'
+  'org/libsdl/app/SDLHapticHandler.class'
+  'org/libsdl/app/SDLHapticHandler_API26.class'
   'org/libsdl/app/SDLInputConnection.class'
   'org/libsdl/app/SDLJoystickHandler.class'
   'org/libsdl/app/SDLJoystickHandler_API16.class'
   'org/libsdl/app/SDLJoystickHandler_API19.class'
-  'org/libsdl/app/SDLHapticHandler.class'
-  'org/libsdl/app/SDLHapticHandler_API26.class'
 )
 
 diff -u \
