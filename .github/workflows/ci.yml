@@ -219,6 +219,37 @@ jobs:
           path: ci-artifacts/task03c
           if-no-files-found: error
 
+      - name: Inspect Android-JVM runtime dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci-artifacts/task02c
+          ./gradlew -PandroidJvm :desktop:dependencies --configuration runtimeClasspath --console=plain | tee ci-artifacts/task02c/android-jvm-runtimeClasspath.txt
+          grep -q 'natives-android' ci-artifacts/task02c/android-jvm-runtimeClasspath.txt || {
+            echo "::error::Android-JVM runtimeClasspath did not resolve natives-android"
+            exit 1
+          }
+          if grep -q 'natives-desktop' ci-artifacts/task02c/android-jvm-runtimeClasspath.txt; then
+            echo "::error::Android-JVM runtimeClasspath still resolves natives-desktop"
+            exit 1
+          fi
+
+      - name: Package Android-JVM Arc native artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci-artifacts/task02c
+          ./gradlew -PandroidJvm desktop:dist --stacktrace
+          cp desktop/build/libs/Mindustry.jar ci-artifacts/task02c/Mindustry-android-jvm.jar
+          bash scripts/android-jvm/task-02c-verify-packaging.sh ci-artifacts/task02c/Mindustry-android-jvm.jar
+
+      - name: Upload Android-JVM packaging proof
+        uses: actions/upload-artifact@v7
+        with:
+          name: Mindustry-Android-JVM-packaging-${{ github.sha }}
+          path: ci-artifacts/task02c
+          if-no-files-found: error
+
       - name: Run unit tests
         run: ./gradlew tests:test --stacktrace
 
