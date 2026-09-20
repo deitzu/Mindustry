@@ -255,7 +255,7 @@ jar cfm "$OUT_JAR" "$MANIFEST" \
 
 echo "== TASK 03C-DEBUG-14: verify diagnostic package =="
 jar tf "$OUT_JAR" | grep -Fxq 'androidjvm/probe/AbsolutePathControllerGlueLoadProbe.class'
-jar tf "$OUT_JAR" | grep -Fxq '$RESOURCE_PATH'
+jar tf "$OUT_JAR" | grep -Fxq "$RESOURCE_PATH"
 grep -Fxq 'org/libsdl/app/SDLControllerManager.class' < <(jar tf "$OUT_JAR")
 
 while IFS= read -r entry; do
