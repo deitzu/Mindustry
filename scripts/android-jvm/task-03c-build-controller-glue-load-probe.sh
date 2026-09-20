@@ -65,7 +65,7 @@ SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
   exit 1
 }
 
-ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-31}"
+ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-36}"
 ANDROID_JAR="$SDK_ROOT/platforms/android-$ANDROID_API_LEVEL/android.jar"
 [ -f "$ANDROID_JAR" ] || {
   echo "::error::Android platform android-$ANDROID_API_LEVEL missing: $ANDROID_JAR"
