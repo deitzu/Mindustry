@@ -11,6 +11,7 @@ SDL_COMMIT="98d1f3a45aae568ccd6ed5fec179330f47d4d356"
 ROOT="$(git rev-parse --show-toplevel)"
 ARC_DIR="$ROOT/../Arc"
 SDL_ROOT="$ROOT/../SDL2-$SDL_VERSION"
+SDL_VERSION_HEADER="$SDL_ROOT/include/SDL_version.h"
 OUT_JAR="$OUT_DIR/Mindustry-android-jvm-android-jni-glue-load-probe.jar"
 RESOURCE_PATH="android-jvm-probe/native/arm64-v8a/libsdl-arc.so"
 ANDROID_JAVA_ROOT="$SDL_ROOT/android-project/app/src/main/java"
@@ -37,7 +38,7 @@ actual_arc="$(git -C "$ARC_DIR" rev-parse HEAD)"
   exit 1
 }
 
-if [ ! -f "$SDL_ROOT/include/SDL2/SDL_version.h" ]; then
+if [ ! -f "$SDL_VERSION_HEADER" ]; then
   echo "== TASK 03C-DEBUG-14: obtain SDL $SDL_VERSION independently =="
   rm -rf "$SDL_ROOT"
   git clone --no-tags --depth=1 --branch "release-$SDL_VERSION" https://github.com/libsdl-org/SDL "$SDL_ROOT"
@@ -49,7 +50,7 @@ actual_sdl_commit="$(git -C "$SDL_ROOT" rev-parse HEAD)"
   exit 1
 }
 
-[ -f "$SDL_ROOT/include/SDL2/SDL_version.h" ] || {
+[ -f "$SDL_VERSION_HEADER" ] || {
   echo "::error::SDL headers not found after checkout: $SDL_ROOT"
   exit 1
 }
