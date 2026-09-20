@@ -34,6 +34,10 @@ grep -Fxq 'arm64-v8a/libarc.so' "$OUT/arc-resource-entries.txt" || {
     echo "::error::Expected Android ARM64 resource arm64-v8a/libarc.so is missing"
     exit 1
 }
+if grep -Evx 'arm64-v8a/libarc\.so' "$OUT/arc-resource-entries.txt" | grep -q .; then
+    echo "::error::Android-JVM artifact contains a non-ARM64 Arc native entry"
+    exit 1
+fi
 if unzip -Z1 "$JAR" | grep -Eq '(^|/)libarcarm64\.so$'; then
     echo "::error::Desktop Linux libarcarm64.so was packaged into the Android-JVM artifact"
     exit 1

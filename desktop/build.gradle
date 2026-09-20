@@ -50,6 +50,10 @@ tasks.register('dist', Jar){
     exclude("**hs_err**.log")
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
+    if(project.hasProperty("androidJvm")){
+        exclude("armeabi-v7a/libarc.so", "x86/libarc.so", "x86_64/libarc.so")
+    }
+
     //don't include steam shared libraries unless necessary
     if(!versionModifier.contains("steam")){
         exclude("**steam**.so", "**steam**.dll", "**steam**.dylib")
