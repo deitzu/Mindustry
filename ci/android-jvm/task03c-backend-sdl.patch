@@ -1,7 +1,7 @@
 diff --git a/arc-core/src/arc/util/OS.java b/arc-core/src/arc/util/OS.java
 --- a/arc-core/src/arc/util/OS.java
 +++ b/arc-core/src/arc/util/OS.java
-@@ -37,7 +37,7 @@
+@@ -37,10 +37,9 @@
      public static boolean isDesktop;
  
      static{
@@ -10,6 +10,10 @@ diff --git a/arc-core/src/arc/util/OS.java b/arc-core/src/arc/util/OS.java
              isAndroid = true;
              isWindows = false;
              isLinux = false;
++            isMac = false;
+-            isMac = false;
+-            is64Bit = false;
+         }
 
 diff --git a/backends/backend-sdl/build.gradle b/backends/backend-sdl/build.gradle
 --- a/backends/backend-sdl/build.gradle
