@@ -2,7 +2,7 @@
 set -euo pipefail
 
 NATIVE_LIB="${1:?usage: $0 <libsdl-arc.so> [output-dir]}"
-OUT_DIR="${2:-ci-artifacts/android-jvm-controller-glue-load-probe}"
+OUT_DIR="${2:-ci-artifacts/android-jvm-android-jni-glue-load-probe}"
 
 ARC_EXPECTED="8eb00ffff0126d0576c67df46f99b8f6bccd96fe"
 SDL_VERSION="2.32.8"
@@ -10,7 +10,7 @@ SDL_VERSION="2.32.8"
 ROOT="$(git rev-parse --show-toplevel)"
 ARC_DIR="$ROOT/../Arc"
 SDL_ROOT="$ROOT/../SDL2-$SDL_VERSION"
-OUT_JAR="$OUT_DIR/Mindustry-android-jvm-controller-glue-load-probe.jar"
+OUT_JAR="$OUT_DIR/Mindustry-android-jvm-android-jni-glue-load-probe.jar"
 RESOURCE_PATH="android-jvm-probe/native/arm64-v8a/libsdl-arc.so"
 ANDROID_JAVA_ROOT="$SDL_ROOT/android-project/app/src/main/java"
 ACTIVITY_SOURCE="$ANDROID_JAVA_ROOT/org/libsdl/app/SDLActivity.java"
@@ -138,7 +138,7 @@ public final class AbsolutePathAndroidJniGlueLoadProbe{
             return;
         }
 
-        File extractDir = new File(tmpDirProperty, "mindustry-android-jvm-controller-glue-load");
+        File extractDir = new File(tmpDirProperty, "mindustry-android-jvm-android-jni-glue-load");
         if(!extractDir.isAbsolute()){
             extractDir = extractDir.getAbsoluteFile();
         }
@@ -226,7 +226,6 @@ grep -Fq 'class SDLInputConnection extends BaseInputConnection' "$ACTIVITY_SOURC
 javac -source 8 -target 8 -proc:none   -cp "$ANDROID_JAR"   -sourcepath "$ANDROID_JAVA_ROOT"   -d "$CLS"   "$ACTIVITY_SOURCE" "$SDL_SOURCE" "$AUDIO_SOURCE" "$CONTROLLER_SOURCE"   "$PROBE_SRC"
 
 echo "== TASK 03C-DEBUG-14: stage only direct JNI_OnLoad class dependencies =="
-echo "== TASK 03C-DEBUG-14: stage only direct JNI_OnLoad class dependencies =="
 
 DIRECT_CLASSES=(
   SDLActivity
@@ -261,16 +260,39 @@ jar cfm "$OUT_JAR" "$MANIFEST" \
 echo "== TASK 03C-DEBUG-14: verify diagnostic package =="
 jar tf "$OUT_JAR" | grep -Fxq 'androidjvm/probe/AbsolutePathAndroidJniGlueLoadProbe.class'
 jar tf "$OUT_JAR" | grep -Fxq "$RESOURCE_PATH"
-grep -Fxq 'org/libsdl/app/SDLControllerManager.class' < <(jar tf "$OUT_JAR")
+for class_name in "${DIRECT_CLASSES[@]}"; do
+  grep -Fxq "org/libsdl/app/$class_name.class" < <(jar tf "$OUT_JAR")
+done
 
-while IFS= read -r entry; do
-  case "$entry" in
-    org/libsdl/app/SDLActivity.class|org/libsdl/app/SDL.class|org/libsdl/app/SDLAudioManager.class|org/libsdl/app/SDLInputConnection.class)
-      echo "::error::Unintended SDL Java glue packaged: $entry"
-      exit 1
-      ;;
-  esac
-done < <(jar tf "$OUT_JAR")
+mapfile -t packaged_java_classes < <(jar tf "$OUT_JAR" | grep -E '^org/libsdl/app/[^/]+\\.class
+unzip -p "$OUT_JAR" META-INF/MANIFEST.MF | tr -d '\r' | grep -Fxq 'Main-Class: androidjvm.probe.AbsolutePathAndroidJniGlueLoadProbe'
+
+native_sha="$(sha256sum "$NATIVE_LIB" | awk '{print $1}')"
+embedded_sha="$(unzip -p "$OUT_JAR" "$RESOURCE_PATH" | sha256sum | awk '{print $1}')"
+[ "$native_sha" = "$embedded_sha" ] || {
+  echo "::error::Embedded native SHA-256 mismatch: source=$native_sha embedded=$embedded_sha"
+  exit 1
+}
+
+echo "Arc revision: $actual_arc"
+echo "SDL source version: $header_version"
+echo "Android Java sources:"
+printf '  %s\\n' "$ACTIVITY_SOURCE" "$SDL_SOURCE" "$AUDIO_SOURCE" "$CONTROLLER_SOURCE"
+echo "Direct JNI_OnLoad Java classes:"
+printf '  %s\\n' "${DIRECT_CLASSES[@]}"
+echo "Verified probe class entry"
+echo "Verified exact four direct JNI_OnLoad classes only"
+echo "Verified real libsdl-arc.so resource"
+echo "Android JNI glue absolute-load diagnostic package: PASS"
+ | sort)
+expected_java_classes=(
+  'org/libsdl/app/SDLActivity.class'
+  'org/libsdl/app/SDLInputConnection.class'
+  'org/libsdl/app/SDLAudioManager.class'
+  'org/libsdl/app/SDLControllerManager.class'
+)
+
+printf '%s\\n' "${packaged_java_classes[@]}" | diff -u <(printf '%s\\n' "${expected_java_classes[@]}")
 
 unzip -p "$OUT_JAR" META-INF/MANIFEST.MF | tr -d '\r' | grep -Fxq 'Main-Class: androidjvm.probe.AbsolutePathAndroidJniGlueLoadProbe'
 
