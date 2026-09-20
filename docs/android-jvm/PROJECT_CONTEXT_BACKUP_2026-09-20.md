@@ -1,429 +1,562 @@
 # Mindustry Android-JVM Patch Project — Context Backup
 
 Snapshot updated: 2026-09-20
-Purpose: current-state recovery point for future sessions. This file is a mutable context snapshot; individual TASK/DEBUG reports remain immutable historical records.
+Purpose: mutable current-state recovery point for future sessions. Individual TASK/DEBUG reports remain immutable historical records.
 
-## 1. Project Objective
+## 1. Project Objective — AUDITED
 
-Run Mindustry's Java/JVM application through a real Android ARM64 runtime.
+Primary objective:
+
+Run Mindustry as a Java/JVM application on a real Android ARM64 runtime.
 
 Target:
+
 - Android JVM
 - arm64-v8a / AArch64
 - Android/bionic ABI
-- real Android native compatibility
-- Mojo Launcher is the current first runtime target, not the definition of the final architecture
+- real Android-compatible native libraries
+- generic Android JVM compatibility
+- Mojo Launcher / MJLauncher is the first real runtime environment, not the definition of the architecture
+
+The project is NOT trying to preserve desktop Linux ARM64/glibc compatibility in the Android branch.
+
+The official Mindustry repository remains the reference for its normal desktop/Linux implementation. This fork is an Android-first engineering line.
+
+Important terminology:
+
+- Android uses bionic, not glibc.
+- The target is Android/bionic-native ELF.
+- Desktop Linux/glibc binaries are not acceptable Android runtime dependencies.
 
 Not the target:
-- desktop Linux ARM64/glibc
-- APK-only execution
+
+- desktop Linux ARM64/glibc compatibility
+- APK-only execution as the JVM solution
 - renamed incompatible Linux libraries
-- fake .so.0 shims
-- Mojo-specific native hacks as the final solution
+- fake .so.0 compatibility shims
+- glibc binaries used as an Android workaround
+- hardcoded Mojo-only hacks presented as generic Android support
 - replacing the SDL backend with GL4ES/LTW/Zink without evidence
 
+## 2. Repository / Branch Strategy
+
 Repository:
+
 - deitzu/Mindustry
-- working branch: ci/task-ci-01
 - protected branch: master
-- current branch HEAD: a584a2564417e6c7c247e6a23ba8e2e905c9209d
-- pinned Arc: 8eb00ffff0126d0576c67df46f99b8f6bccd96fe
-- SDL: 2.32.8
 
-## 2. Core Architecture Decision
+Historical/debug branch:
 
-Desktop:
-backend-sdl -> GLEW -> desktop OpenGL -> SDL2
+- ci/task-ci-01
+- preserves the earlier TASK 03C investigation chain
+
+Active Android-first branch:
+
+- android-jvm
+- created from the latest ci/task-ci-01 state
+- current HEAD: 7ad0c7741ce22ec61ecb1f68f2b5ad57801c1a75
+
+Current HEAD commit:
+
+- 7ad0c7741ce22ec61ecb1f68f2b5ad57801c1a75
+- message: Document DEBUG-14 final CI success
+
+Do not reset, rebase, or force-push as ordinary task operations.
+Do not modify master.
+
+Current branch strategy is documented in:
+
+- docs/android-jvm/ANDROID_FIRST_BRANCH.md
+
+## 3. Acceptance Policy
+
+Primary acceptance target:
+
+Android JVM + arm64-v8a + Android/bionic + real runtime compatibility.
+
+Desktop Linux support is NOT an acceptance criterion for this branch.
+
+Desktop build/regression checks may still be run when convenient, especially for shared-source safety, but a Linux-only incompatibility is not by itself a reason to block Android progress.
+
+The existing Android APK is not the JVM solution. It may remain a secondary regression/reference target when practical, but Android-JVM compatibility is the primary acceptance target.
+
+Do not spend project tasks preserving Linux behavior unless a later implementation explicitly requires a shared path or the preservation is nearly free.
+
+Do not intentionally destroy unrelated desktop code merely for cleanup. Prefer Android-specific paths or isolated platform changes.
+
+## 4. Core Architecture
 
 Android:
-backend-sdl -> Android GLES -> static SDL2 -> Android system APIs
 
-Primary native GL boundary:
-- Arc/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java
+backend-sdl
+-> Android GLES
+-> static SDL2
+-> Android EGL/system APIs
 
-Do not globally convert desktop OpenGL/GLEW to GLES.
+Target native ABI:
 
-Mojo's GL4ES/LTW/Zink renderer is tied to its LWJGL/Minecraft rendering path. It is not currently treated as the renderer for backend-sdl. SDL's Android build has its own Android EGL/GLES path.
+Android/bionic
+-> arm64-v8a / AArch64
 
-## 3. Completed Work
+Desktop:
+
+backend-sdl
+-> desktop OpenGL/GLEW
+-> SDL2
+
+Desktop behavior is reference/upstream behavior, not the Android branch's acceptance target.
+
+Do not globally convert the desktop OpenGL/GLEW implementation into Android GLES.
+
+## 5. Native Rules
+
+Never use:
+
+- libpthread.so.0
+- libc.so.6
+- ld-linux-aarch64.so.1
+- libGL.so.1
+- libSDL2-2.0.so.0
+- desktop Linux ARM64 libraries
+- fake compatibility .so.0 files
+- library renaming as an ABI workaround
+
+Native compatibility must be demonstrated through actual artifact inspection and real Android runtime evidence.
+
+For native artifacts, verify where applicable:
+
+- ELF class
+- AArch64 machine
+- Android/bionic compatibility
+- program headers/interpreter
+- DT_NEEDED
+- SONAME
+- JNI symbols
+- forbidden dependency scan
+
+## 6. Pinned Dependencies
+
+Arc:
+
+8eb00ffff0126d0576c67df46f99b8f6bccd96fe
+
+SDL:
+
+- version 2.32.8
+- commit 98d1f3a45aae568ccd6ed5fec179330f47d4d356
+- release ref release-2.32.8
+
+Android CI toolchain:
+
+- NDK 30.0.16248370
+- Android API 36
+- CMake 3.31.6
+
+Do not silently change pinned revisions.
+
+## 7. Completed Work
 
 TASK 01 — Native Artifact Audit
-- Complete.
-- Established that desktop Linux/AArch64 native naming is incompatible with the Android target.
-- Established that Arc already contains real Android arm64-v8a native artifacts.
+
+Complete.
+
+Established that available ARM64 Linux native libraries can still be incompatible with Android because they use glibc/Linux userspace dependencies.
 
 TASK 02 — Native Build Feasibility
-- Complete.
-- Established Android build feasibility for backend-sdl with static SDL2 and Android GLES.
-- Established the minimal native GL boundary in SDLGL.java.
 
-TASK 03C native implementation/debug chain
-- Native Android ARM64 SDL build: COMPLETE.
-- Android ELF/JNI/dependency verification: COMPLETE.
-- Desktop regression: COMPLETE.
-- DEBUG-11 runtime loader-boundary analysis: COMPLETE.
-- DEBUG-12 real Android JVM execution: COMPLETE as a diagnostic task.
-- DEBUG-12A Android JVM OS/architecture detection: COMPLETE as a runtime boundary.
-- DEBUG-13 native library discovery investigation: COMPLETE as a discovery diagnosis.
-- DEBUG-13A absolute-path native-load diagnostic: COMPLETE as an isolation experiment.
+Complete.
 
-## 4. Native Artifact Evidence
+Established the feasible Android SDL path:
 
-Verified Android artifact:
-- libsdl-arc.so
-- ELF64
-- AArch64
-- Android/bionic-compatible
-- SONAME: libsdl-arc.so
-- JNI symbols present
-- Android GLES/system dependencies present
-- forbidden desktop/glibc dependencies absent
+Android backend-sdl
+-> static SDL2
+-> Android GLES
+-> Android system libraries
 
-Known packaging:
-- sdl-arc-natives-arm64-v8a.jar
-  - libsdl-arc.so
+Identified SDLGL.java as the main native GL compatibility boundary.
 
-Relevant CI evidence:
-- DEBUG-10B 35479497497 PASS
-- DEBUG-11 35480439580 PASS
-- DEBUG-12 35486586424 PASS
-- DEBUG-12A implementation 35490330638 PASS
-- DEBUG-12A corrected overlay 35491902802 PASS
-- DEBUG-12A Tests 35491902827 PASS
-- DEBUG-12A Wrapper 35491902816 PASS
-- DEBUG-13 diagnostic 35492978589 PASS
-- DEBUG-13 Tests 35492978485 PASS
-- DEBUG-13 Wrapper 35492978472 PASS
-- latest absolute-load Tests 35494121983 PASS
-- latest absolute-load Wrapper 35494122008 PASS
+TASK 03A — Android CI Toolchain Bootstrap
 
-## 5. Current Arc Overlay State
+Complete.
 
-Production-side repository mechanism:
-- ci/android-jvm/task03c-backend-sdl.patch
+Established deterministic Android SDK/NDK tooling.
 
-Android runtime detection was extended from:
-propNoNull("java.runtime.name").contains("Android Runtime")
-to:
-propNoNull("java.runtime.name").contains("Android")
+TASK 03B — Android backend-sdl audit/plan
 
-Existing vendor checks for:
-- The Android Project
-remain preserved.
+Complete.
 
-The legacy Android assignment:
-- is64Bit = false;
-was removed.
+Established:
 
-Therefore architecture-derived is64Bit remains authoritative.
+- current backend-sdl has no Android target
+- current Linux path uses dynamic SDL2 and desktop OpenGL/libGL
+- global GLEW handling conflicts with Android
+- Android implementation should be platform-specific
+- SDL 2.32.8 already contains Android video/GLES support
+- static SDL2 is feasible
 
-SharedLibraryLoader.java was not changed.
+TASK 03C native/debug chain
 
-Arc remains pinned exactly to:
-- 8eb00ffff0126d0576c67df46f99b8f6bccd96fe
+Completed boundaries:
 
-## 6. DEBUG-12 / DEBUG-12A Real Android Runtime Evidence
+- Android ARM64 native build
+- ELF/JNI/dependency verification
+- Android OS detection on real JVM
+- Android ARM64 architecture detection
+- native library mapping
+- native search-path diagnosis
+- absolute-path native load isolation
+- SDL Android Java glue source/package diagnosis
 
-Real device:
-- Mojo Launcher
+## 8. Important Runtime Evidence
+
+Real Android environment:
+
+- Mojo Launcher / MJLauncher
 - Android ARM64
-- JVM: OpenJDK Runtime Environment (Android)
-- JVM vendor: Oracle Corporation
-- JVM version: 21.0.12-internal
-- os.name: Linux
-- os.arch: aarch64
-- sun.arch.data.model: 64
+- Android API 31
+- OpenJDK Runtime Environment (Android)
+- Java VM vendor Oracle Corporation
+- JVM 21.0.12-internal
+- os.name = Linux
+- os.arch = aarch64
+- sun.arch.data.model = 64
 
-Current real runtime reports:
+DEBUG-12A proved:
+
 - OS.isAndroid=true
 - OS.isLinux=false
 - OS.isARM=true
 - OS.is64Bit=true
+- library mapping for sdl-arc is correct
 
-Library request:
-- LIBRARY_REQUEST=sdl-arc
-- LIBRARY_MAPPED_NAME=sdl-arc
+Do not interpret the Java exception text "target: Linux, 64-bit" as proof that OS.isLinux is true. os.name is still Linux on the Android JVM.
 
-Important:
-- SharedLibraryLoader.mapLibraryName("sdl-arc") returns "sdl-arc" on Android.
-- System.loadLibrary("sdl-arc") is then invoked.
-- Do not interpret the exception text "target: Linux, 64-bit" as OS.isLinux=true; os.name remains Linux on the Android JVM.
+## 9. Native Discovery Boundary
 
-## 7. DEBUG-13 Native Discovery Evidence
+Execute-JAR under Mojo does not automatically place a JAR-contained native resource into the JVM native search path.
 
-Mojo source investigation established:
+Real runtime evidence showed:
 
-Normal version/game launch:
-native archive
--> Mojo native extraction
--> cache/natives/<version>
--> -Djava.library.path includes version-native-dir and Tools.NATIVE_LIB_DIR
--> JVM native loading
-
-Execute JAR:
-JAR
--> AWTActivity reads Main-Class
--> JavaRunner.startJvm(...)
--> no normal MoJsonDownloader/NativesExtractor/versionSpecificNativesDir pipeline
-
-Mojo Tools.NATIVE_LIB_DIR is based on the Android application's nativeLibraryDir.
-
-Real Execute-JAR runtime showed java.library.path entries including:
-- /data/user/0/git.artdeell.mjlaunch/runtimes/Internal-21/lib
-- /data/app/.../lib/arm64
-- /data/user/0/git.artdeell.mjlaunch/runtimes/Internal-21/lib/server
-- /data/user/0/git.artdeell.mjlaunch/runtimes/Internal-21/lib/jli
-
-Diagnostic result:
-- libsdl-arc.so absent from every listed java.library.path entry
-- embedded JAR resource exists at:
-  android-jvm-probe/native/arm64-v8a/libsdl-arc.so
-
-Therefore:
 System.loadLibrary("sdl-arc")
 -> native search-path discovery failure
 
+The embedded JAR resource existed, but the native file was absent from all relevant java.library.path entries.
+
 No production SharedLibraryLoader change has been made.
 
-## 8. DEBUG-13A Absolute-Path Result
+This remains a later integration decision, not a reason to alter the historical diagnostic chain.
 
-The diagnostic probe extracted the embedded Android native library to a real Android filesystem path.
+## 10. DEBUG-13A Absolute-Path Boundary
+
+The real Android JVM extracted the actual Android native library from the JAR and called:
+
+System.load(absolutePath)
 
 Observed:
-- absolute path under app cache
+
 - file exists
 - regular file
 - readable
-- size: 4,710,176 bytes
-- SHA-256 observed: d98174dd... in the runtime diagnostic
+- non-zero size
+- real ARM64 native artifact
+- absolute load path entered
 
-Then:
-System.load(absolutePath)
+Then SDL Android JNI initialization reached Java glue resolution and failed on:
 
-was attempted on the real Android JVM.
-
-Result:
-NoClassDefFoundError:
 org/libsdl/app/SDLControllerManager
 
-This is not the same as a normal missing-library or DT_NEEDED linker error.
+Precise meaning:
 
-Precise interpretation:
-- JAR resource extraction to Android filesystem: PASS
-- System.load(absolutePath) was entered: PASS
-- native loading progressed into SDL Android JNI_OnLoad-related Java class resolution: CONFIRMED by runtime/source evidence
-- org.libsdl.app.SDLControllerManager is missing: CONFIRMED by runtime
-- complete JNI registration: NOT proven
-- complete native linker initialization: NOT proven
-- SDL_Init: NOT tested
-- graphics: NOT tested
+Confirmed:
 
-Do not overclaim that the entire native library load/link/JNI stage succeeded.
+- Android filesystem extraction
+- absolute System.load() entry
+- native initialization reached SDL Android Java class resolution
+- missing SDLControllerManager class
 
-Historical diagnostic commit:
-- 0b05554a41731801dd9a05afeede06a75d6b50d4
+Not proven at that stage:
 
-Latest branch HEAD:
-- a584a2564417e6c7c247e6a23ba8e2e905c9209d
-- message: Add Android absolute-path native load CI probe
-
-Latest HEAD only adds CI build/upload wiring for the absolute-path diagnostic:
-- Build Android absolute-path native load diagnostic
-- Upload Android absolute-path native load diagnostic
-
-No production loader change in that commit.
-
-CI on latest HEAD:
-- Tests 35494121983 PASS
-- Gradle Wrapper Validation 35494122008 PASS
-- Continuous Build result for latest HEAD is not yet recorded in this snapshot; do not assume it passed unless verified.
-
-## 9. Current Runtime Boundary
-
-Proven:
-
-Android JVM startup
-  PASS
-
-Probe execution
-  PASS
-
-Android detection
-  PASS
-
-Linux exclusion
-  PASS
-
-ARM64 detection
-  PASS
-
-Logical mapping
-  PASS
-
-System.loadLibrary("sdl-arc")
-  REACHED
-
-Native search-path discovery through System.loadLibrary
-  FAIL because libsdl-arc.so is absent from java.library.path
-
-Independent absolute-path test:
-JAR resource
-  -> Android filesystem extraction
-  -> System.load(absolutePath)
-  -> SDL Android Java glue resolution
-  -> FAIL: org.libsdl.app.SDLControllerManager missing
-
-Current boundary:
-SDL Android Java glue / JNI_OnLoad-related initialization
-
-## 10. Current Task State
-
-DEBUG-12A:
-- Real Android OS detection boundary: PASS
-- Real Android 64-bit detection boundary: PASS
-- Historical report should remain immutable.
-
-DEBUG-13:
-- Native discovery diagnosis: PASS
-- Execute JAR does not automatically place the JAR-contained native resource into java.library.path.
-- Historical report should remain immutable.
-
-DEBUG-13A:
-- Absolute-path isolation experiment: COMPLETE
-- The extracted native file reaches SDL Android Java glue class resolution.
-- Failure: org.libsdl.app.SDLControllerManager missing.
-- Historical report should remain immutable.
-
-No production SDL Java glue integration has been applied yet.
-
-## 11. Immediate Next Task
-
-TASK 03C-DEBUG-14 — SDL Android Java Glue / JNI_OnLoad Dependency
-
-Primary question:
-
-What minimal SDL 2.32.8 Android Java glue must be present on the Android JVM classpath for the existing SDL native library's JNI_OnLoad-related initialization to proceed?
-
-Investigation order:
-
-1. Inspect SDL 2.32.8 Android Java glue source/classes.
-2. Determine exactly which org.libsdl.app.* classes are referenced during JNI_OnLoad and immediate native initialization.
-3. Identify the minimal class set required for the next runtime boundary.
-4. Determine how those classes can be packaged into the Execute-JAR diagnostic runtime.
-5. Create a minimal diagnostic artifact.
-6. Run CI/build verification.
-7. Test the fresh artifact on the same real Mojo Android JVM.
-8. Stop at the first genuine new runtime failure.
-
-Do not immediately implement full SDLActivity/surface/rendering/lifecycle integration.
-
-Do not modify SharedLibraryLoader merely because of the earlier search-path issue.
-
-## 12. Important DEBUG-14 Constraints
-
-Do not:
-- change the Arc pin
-- use desktop SDL2
-- use Linux/glibc libraries
-- rename native libraries
-- create compatibility shims
-- replace SDL with GL4ES/LTW/Zink
-- modify Mojo renderer hooks
-- rewrite SharedLibraryLoader without evidence
-- start full Mindustry runtime
-- claim complete JNI success from a partial JNI_OnLoad trace
-
-Current Android architecture remains:
-backend-sdl
--> Android GLES
--> static SDL2
--> Android system APIs
-
-## 13. Open Later Risks
-
-Still unproven:
 - complete JNI registration
 - complete native initialization
 - SDL_Init
-- SDL Android Activity/context requirements
-- SDL surface/window creation
-- EGL context creation
+- Android surface/window
+- EGL
 - GLES runtime
-- input/lifecycle integration
 - full Mindustry startup
-- compatibility with launchers other than Mojo
 
-These are later boundaries.
+## 11. DEBUG-14 — COMPLETE
 
-## 14. Historical Reports
+Current report:
 
-- docs/android-jvm/TASK_01_NATIVE_ARTIFACT_AUDIT.md
-- docs/android-jvm/TASK_02_NATIVE_BUILD_FEASIBILITY.md
-- docs/android-jvm/TASK_03C_DEBUG_02_ARC_PATCH.md
-- docs/android-jvm/TASK_03C_DEBUG_03_SDL_VERSION.md
-- docs/android-jvm/TASK_03C_DEBUG_08_GLES_EXT.md
-- docs/android-jvm/TASK_03C_DEBUG_09_GLES_LINKAGE.md
-- docs/android-jvm/TASK_03C_DEBUG_10B_TASK_DISCOVERY.md
-- docs/android-jvm/TASK_03C_DEBUG_11_ANDROID_RUNTIME.md
-- docs/android-jvm/TASK_03C_DEBUG_12_ANDROID_JVM_LOAD.md
+docs/android-jvm/TASK_03C_DEBUG_14_FINAL.md
 
-DEBUG-12A/13/13A reports should be added as immutable historical reports when finalized.
+DEBUG-14 CI/package scope is complete.
 
-PROJECT_HANDOFF.md is maintained on the separate audit branch:
-- audit/task-01-native-artifact
+Final CI for commit b4433a1dc78bd4910724268645c1c06bf7ac08f1:
 
-It is intentionally not expected on ci/task-ci-01.
+- Continuous Build: 35505910722 — PASS
+- Tests: 35505910743 — PASS
+- Gradle Wrapper validation: 35505910713 — PASS
 
-## 15. Long-Term Roadmap
+Final artifact:
+
+Android-JVM-android-jni-glue-load-probe-b4433a1dc78bd4910724268645c1c06bf7ac08f1
+
+Artifact ID:
+
+10603299911
+
+Artifact SHA-256:
+
+9641318b1c58be12e7b153267379937192f73ba4e29bf54b147a1d0853a9c8f7
+
+SDL 2.32.8 source:
+
+98d1f3a45aae568ccd6ed5fec179330f47d4d356
+
+Direct Java JNI_OnLoad classes proven from SDL source:
+
+- org/libsdl/app/SDLActivity
+- org/libsdl/app/SDLInputConnection
+- org/libsdl/app/SDLAudioManager
+- org/libsdl/app/SDLControllerManager
+
+Important source detail:
+
+SDLInputConnection is a top-level class declared in SDLActivity.java at this SDL revision. There is no separate SDLInputConnection.java file.
+
+Native SHA-256:
+
+d98174dd5d9c2b94f595cafbd53b8382cee0f57e4e27dff97ea86cab512dceb7
+
+Embedded native SHA-256:
+
+d98174dd5d9c2b94f595cafbd53b8382cee0f57e4e27dff97ea86cab512dceb7
+
+Therefore the diagnostic package embeds the same real native artifact.
+
+DEBUG-14 proves:
+
+- source selection
+- four-class identification
+- Java compilation
+- deterministic packaging
+- artifact integrity
+- CI success
+
+DEBUG-14 does NOT prove real Android runtime success with the four classes.
+
+## 12. DEBUG-14 CI Failure History
+
+The DEBUG-14 CI/package chain had multiple separate failures, preserved as historical evidence.
+
+Relevant fixes included:
+
+- SDL checkout validation/self-download
+- SDL source path/version corrections
+- script root detection
+- class-list ordering assertion correction
+
+The final green pipeline confirms the current package construction is reproducible in CI.
+
+Do not rewrite earlier reports merely because later fixes succeeded.
+
+## 13. Current Runtime Boundary
+
+The current unclosed runtime boundary is:
+
+real Android JVM
+-> absolute System.load(absPath)
+-> SDL Android JNI_OnLoad
+-> four real SDL Java glue classes available
+-> observe the next genuine runtime result
+
+Do not preemptively add more SDL classes.
+
+Do not claim complete JNI success until the real Android JVM proves it.
+
+## 14. Immediate Next Task
+
+TASK 03C-DEBUG-15 — Real Android Four-Class JNI Load Probe
+
+Objective:
+
+Run the final DEBUG-14 four-class diagnostic artifact on the real Mojo Android JVM and capture the earliest post-class-resolution boundary.
+
+Expected test flow:
+
+diagnostic JAR
+-> real Mojo Android JVM
+-> extract real libsdl-arc.so
+-> System.load(absPath)
+-> four SDL Java classes available
+-> observe next boundary
+
+Possible results:
+
+- System.load() completes
+- next missing Java class
+- missing method/field
+- JNI registration failure
+- Android Context requirement
+- Activity requirement
+- surface/window requirement
+- another native runtime/linker failure
+
+STOP at the first genuine new boundary.
+
+Do not solve future runtime layers in DEBUG-15.
+
+## 15. Do Not Touch Yet
+
+Unless new evidence requires it, do not modify:
+
+- SharedLibraryLoader
+- Mojo renderer hooks
+- GL4ES/LTW/Zink integration
+- full SDLActivity integration
+- Android Activity lifecycle
+- EGL/surface integration
+- Mindustry renderer
+- SdlApplication
+- SdlGraphics
+- ClientLauncher
+- DesktopLauncher
+- Arc pinned source
+- Arc revision
+- SDL version
+
+The old Linux loader issue is a known discovery diagnosis. It is not the next runtime test.
+
+## 16. Android-First Engineering Policy
+
+For the active android-jvm branch:
+
+1. Android/bionic compatibility is the primary target.
+2. Linux/glibc compatibility is not an acceptance requirement.
+3. Mojo is a runtime environment/test target, not the architecture definition.
+4. Use real Android native libraries.
+5. Preserve evidence and immutable history.
+6. Prefer the smallest platform-specific change that crosses the next real boundary.
+7. Do not infer runtime compatibility from CI.
+8. Do not solve multiple future layers in one task.
+
+## 17. Long-Term Roadmap
 
 TASK 03C:
-- Android ARM64 SDL native build: COMPLETE
+
+- Android ARM64 native build: COMPLETE
 - artifact/ELF/JNI/dependency verification: COMPLETE
-- real Android JVM execution: CONFIRMED
 - Android runtime detection: COMPLETE
-- native-library search-path diagnosis: COMPLETE
-- absolute-path native load diagnostic: COMPLETE
-- SDL Android Java glue diagnosis: NEXT
+- native discovery diagnosis: COMPLETE
+- absolute-path native-load isolation: COMPLETE
+- SDL Android Java glue package: COMPLETE
+- real four-class JNI load: NEXT
 - complete JNI initialization: PENDING
 - SDL_Init: PENDING
-- SDL window: PENDING
+- Android Context/Activity: PENDING
+- window/surface: PENDING
 - EGL/GLES context: PENDING
-- rendering: PENDING
+- backend-sdl runtime initialization: PENDING
+- Mindustry runtime initialization: PENDING
 
 TASK 04:
-- Android-JVM entry point
-- pending until required TASK 03C runtime boundaries are proven
+
+Android-JVM entry point
+- pending until required runtime boundaries are proven
 
 TASK 05:
-- runtime integration
+
+Runtime integration
 - pending
 
 TASK 06:
-- regression/final validation
+
+Final Android ARM64 validation
 - pending
 
-## 16. Current Handoff
+Desktop Linux remains upstream/reference behavior and is not an acceptance gate for the Android-first branch.
+
+## 18. Documentation / History
+
+Historical TASK/DEBUG reports remain immutable.
+
+Current mutable context:
+
+docs/android-jvm/PROJECT_CONTEXT_BACKUP_2026-09-20.md
+
+Active strategy:
+
+docs/android-jvm/ANDROID_FIRST_BRANCH.md
+
+Latest historical report:
+
+docs/android-jvm/TASK_03C_DEBUG_14_FINAL.md
+
+PROJECT_HANDOFF.md is maintained on the separate audit branch:
+
+audit/task-01-native-artifact
+
+It is intentionally not expected on android-jvm.
+
+## 19. Current Handoff
 
 Status:
-TASK 03C-DEBUG-13A complete as a diagnostic boundary. The next blocker is missing SDL Android Java glue class org.libsdl.app.SDLControllerManager during absolute-path native load.
+
+DEBUG-14 CI/package complete. Android-first strategy audited and retained. Current next boundary is the real Android four-class JNI load probe.
 
 Branch:
-ci/task-ci-01
 
-Baseline:
-a584a2564417e6c7c247e6a23ba8e2e905c9209d
+android-jvm
+
+Baseline for current completed DEBUG-14 package task:
+
+b4433a1dc78bd4910724268645c1c06bf7ac08f1
+
+Current branch HEAD:
+
+7ad0c7741ce22ec61ecb1f68f2b5ad57801c1a75
 
 Commit:
-a584a2564417e6c7c247e6a23ba8e2e905c9209d
 
-Files changed in latest commit:
-- .github/workflows/ci.yml
+7ad0c7741ce22ec61ecb1f68f2b5ad57801c1a75
 
 Pinned Arc:
+
 8eb00ffff0126d0576c67df46f99b8f6bccd96fe
 
-Result:
-Real Android JVM correctly detects Android/ARM64. System.loadLibrary("sdl-arc") cannot discover the JAR-contained library through java.library.path. Direct System.load() of the extracted real Android native library reaches SDL Android Java glue resolution and currently fails because org.libsdl.app.SDLControllerManager is missing.
+Pinned SDL:
 
-Next action:
-Delegate TASK 03C-DEBUG-14 to the coder. Investigate and minimally package/probe the required SDL 2.32.8 Android Java glue, run CI/build verification, then test the fresh diagnostic artifact on the real Mojo Android JVM and stop at the next genuine runtime boundary.
+2.32.8 / 98d1f3a45aae568ccd6ed5fec179330f47d4d356
+
+Result:
+
+Android-first branch strategy now explicitly treats Android JVM / arm64-v8a / Android-bionic as the acceptance target. Desktop Linux/glibc support is upstream/reference behavior and is not an acceptance gate. DEBUG-14 produced and verified the four-class SDL Android Java glue diagnostic package.
+
+CI:
+
+- 35505910722 — Continuous Build: PASS
+- 35505910743 — Tests: PASS
+- 35505910713 — Gradle Wrapper validation: PASS
+
+Verification:
+
+- Android ARM64 native build: PASS
+- ELF/JNI/dependency checks: PASS
+- DEBUG-14 four-class packaging: PASS
+- artifact SHA integrity: PASS
+- real Android four-class runtime: NOT YET VERIFIED
+
+Known limitations:
+
+- full JNI initialization unknown
+- SDL_Init unknown
+- Android context/activity/surface unknown
+- EGL/GLES runtime unknown
+- full Mindustry startup unknown
+- loader integration remains pending
+- compatibility with launchers other than Mojo remains unverified
+
+Next task:
+
+TASK 03C-DEBUG-15 — Real Android Four-Class JNI Load Probe
