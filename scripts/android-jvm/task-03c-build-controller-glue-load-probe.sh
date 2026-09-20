@@ -301,9 +301,9 @@ mapfile -t packaged_java_classes < <(
 
 expected_java_classes=(
   'org/libsdl/app/SDLActivity.class'
-  'org/libsdl/app/SDLInputConnection.class'
   'org/libsdl/app/SDLAudioManager.class'
   'org/libsdl/app/SDLControllerManager.class'
+  'org/libsdl/app/SDLInputConnection.class'
 )
 
 diff -u \
