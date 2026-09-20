@@ -254,8 +254,8 @@ jobs:
       - name: Upload SDL Android controller Java glue diagnostic
         uses: actions/upload-artifact@v7
         with:
-          name: Android-JVM-controller-glue-load-probe-${{ github.sha }}
-          path: ci-artifacts/android-jvm-controller-glue-load-probe
+          name: Android-JVM-android-jni-glue-load-probe-${{ github.sha }}
+          path: ci-artifacts/android-jvm-android-jni-glue-load-probe
           if-no-files-found: error
 
       - name: Probe Android JVM native loader boundary
