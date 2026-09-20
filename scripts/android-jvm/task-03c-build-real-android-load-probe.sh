@@ -236,6 +236,7 @@ try:
 finally:
     if tmp_path.exists():
         tmp_path.unlink()
+PY
 
 jar ufm "$OUT_JAR" "$MANIFEST"
 jar uf "$OUT_JAR" -C "$CLS" androidjvm/probe/RealAndroidNativeLoadProbe.class
