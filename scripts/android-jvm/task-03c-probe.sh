@@ -139,20 +139,21 @@ echo "== TASK 03C: package Android ARM64 JNI library =="
 echo "== TASK 03C: locate Android native package =="
 PACKAGE_JAR=""
 PACKAGE_ENTRY=""
+EXPECTED_PACKAGE_NAME="sdl-arc-natives-arm64-v8a.jar"
+
 while IFS= read -r candidate; do
   [ -f "$candidate" ] || continue
-  while IFS= read -r entry; do
-    if printf '%s\n' "$entry" | grep -Eq '(^|/)libsdl-arc\.so$' && printf '%s\n' "$entry" | grep -Fq 'arm64-v8a'; then
-      PACKAGE_JAR="$candidate"
-      PACKAGE_ENTRY="$entry"
-      break
-    fi
-  done < <(jar tf "$candidate" 2>/dev/null || true)
-  [ -n "$PACKAGE_JAR" ] && break
+  [ "$(basename "$candidate")" = "$EXPECTED_PACKAGE_NAME" ] || continue
+
+  if jar tf "$candidate" 2>/dev/null | grep -Fxq 'libsdl-arc.so'; then
+    PACKAGE_JAR="$candidate"
+    PACKAGE_ENTRY="libsdl-arc.so"
+    break
+  fi
 done < <(find "$ARC_DIR/backends/backend-sdl" -type f -name '*.jar' -print)
 
 [ -n "$PACKAGE_JAR" ] || {
-  echo "::error::No Android ARM64 native JAR containing libsdl-arc.so was found"
+  echo "::error::No Android ARM64 native JAR '$EXPECTED_PACKAGE_NAME' containing libsdl-arc.so was found"
   find "$ARC_DIR/backends/backend-sdl" -type f -name '*.jar' -print || true
   exit 1
 }
