@@ -13,10 +13,12 @@ SDL_ROOT="$ROOT/../SDL2-$SDL_VERSION"
 OUT_JAR="$OUT_DIR/Mindustry-android-jvm-android-jni-glue-load-probe.jar"
 RESOURCE_PATH="android-jvm-probe/native/arm64-v8a/libsdl-arc.so"
 ANDROID_JAVA_ROOT="$SDL_ROOT/android-project/app/src/main/java"
+
 ACTIVITY_SOURCE="$ANDROID_JAVA_ROOT/org/libsdl/app/SDLActivity.java"
 SDL_SOURCE="$ANDROID_JAVA_ROOT/org/libsdl/app/SDL.java"
 AUDIO_SOURCE="$ANDROID_JAVA_ROOT/org/libsdl/app/SDLAudioManager.java"
 CONTROLLER_SOURCE="$ANDROID_JAVA_ROOT/org/libsdl/app/SDLControllerManager.java"
+DIRECT_CLASSES=(SDLActivity SDLInputConnection SDLAudioManager SDLControllerManager)
 
 [ -f "$NATIVE_LIB" ] || {
   echo "::error::Native library not found: $NATIVE_LIB"
@@ -45,8 +47,15 @@ header_version="$(awk '/^#define SDL_MAJOR_VERSION[[:space:]]/ {major=$3} /^#def
   exit 1
 }
 
-[ -f "$CONTROLLER_SOURCE" ] || {
-  echo "::error::SDLControllerManager.java not found: $CONTROLLER_SOURCE"
+for source in "$ACTIVITY_SOURCE" "$SDL_SOURCE" "$AUDIO_SOURCE" "$CONTROLLER_SOURCE"; do
+  [ -f "$source" ] || {
+    echo "::error::Required SDL Android Java source not found: $source"
+    exit 1
+  }
+done
+
+grep -Fq 'class SDLInputConnection extends BaseInputConnection' "$ACTIVITY_SOURCE" || {
+  echo "::error::SDLInputConnection declaration not found in SDLActivity.java"
   exit 1
 }
 
@@ -56,7 +65,7 @@ SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
   exit 1
 }
 
-ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-36}"
+ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-31}"
 ANDROID_JAR="$SDK_ROOT/platforms/android-$ANDROID_API_LEVEL/android.jar"
 [ -f "$ANDROID_JAR" ] || {
   echo "::error::Android platform android-$ANDROID_API_LEVEL missing: $ANDROID_JAR"
@@ -210,16 +219,9 @@ public final class AbsolutePathAndroidJniGlueLoadProbe{
 }
 JAVA
 
-echo "== TASK 03C-DEBUG-14: compile exact SDL 2.32.8 Android JNI glue sources =="
+echo "== TASK 03C-DEBUG-14: compile exact SDL 2.32.8 Android Java JNI glue sources =="
 
-for source in "$ACTIVITY_SOURCE" "$SDL_SOURCE" "$AUDIO_SOURCE" "$CONTROLLER_SOURCE"; do
-  [ -f "$source" ] || {
-    echo "::error::Required SDL Android Java source not found: $source"
-    exit 1
-  }
-done
-
-javac -source 8 -target 8 -proc:none -implicit:none \
+javac -source 8 -target 8 -proc:none \
   -cp "$ANDROID_JAR" \
   -sourcepath "$ANDROID_JAVA_ROOT" \
   -d "$CLS" \
@@ -229,46 +231,34 @@ javac -source 8 -target 8 -proc:none -implicit:none \
   "$CONTROLLER_SOURCE" \
   "$PROBE_SRC"
 
-echo "== TASK 03C-DEBUG-14: stage direct JNI_OnLoad registration classes =="
-
-DIRECT_CLASSES=(
-  SDLActivity
-  SDLInputConnection
-  SDLAudioManager
-  SDLControllerManager
-)
+echo "== TASK 03C-DEBUG-14: stage only four direct JNI_OnLoad classes =="
 
 for class_name in "${DIRECT_CLASSES[@]}"; do
   class_file="$CLS/org/libsdl/app/$class_name.class"
   [ -f "$class_file" ] || {
-    echo "::error::Expected direct JNI_OnLoad class missing: $class_file"
+    echo "::error::Expected JNI_OnLoad class missing: $class_file"
     exit 1
   }
   cp "$class_file" "$STAGE/org/libsdl/app/"
 done
 
 cp "$CLS/androidjvm/probe/AbsolutePathAndroidJniGlueLoadProbe.class" "$STAGE/androidjvm/probe/"
+cp "$NATIVE_LIB" "$STAGE/$RESOURCE_PATH"
 
 cat > "$MANIFEST" <<'EOF'
 Manifest-Version: 1.0
 Main-Class: androidjvm.probe.AbsolutePathAndroidJniGlueLoadProbe
 EOF
 
-cp "$NATIVE_LIB" "$STAGE/$RESOURCE_PATH"
-
 jar cfm "$OUT_JAR" "$MANIFEST" \
   -C "$STAGE" androidjvm/probe/AbsolutePathAndroidJniGlueLoadProbe.class \
   -C "$STAGE" org/libsdl/app \
   -C "$STAGE" android-jvm-probe/native/arm64-v8a/libsdl-arc.so
 
-echo "== TASK 03C-DEBUG-14: verify diagnostic package =="
+echo "== TASK 03C-DEBUG-14: verify exact diagnostic package =="
 
 jar tf "$OUT_JAR" | grep -Fxq 'androidjvm/probe/AbsolutePathAndroidJniGlueLoadProbe.class'
 jar tf "$OUT_JAR" | grep -Fxq "$RESOURCE_PATH"
-
-for class_name in "${DIRECT_CLASSES[@]}"; do
-  jar tf "$OUT_JAR" | grep -Fxq "org/libsdl/app/$class_name.class"
-done
 
 mapfile -t packaged_java_classes < <(
   jar tf "$OUT_JAR" |
@@ -283,8 +273,9 @@ expected_java_classes=(
   'org/libsdl/app/SDLControllerManager.class'
 )
 
-printf '%s\n' "${packaged_java_classes[@]}" |
-  diff -u <(printf '%s\n' "${expected_java_classes[@]}")
+diff -u \
+  <(printf '%s\n' "${expected_java_classes[@]}") \
+  <(printf '%s\n' "${packaged_java_classes[@]}")
 
 unzip -p "$OUT_JAR" META-INF/MANIFEST.MF |
   tr -d '\r' |
@@ -292,6 +283,7 @@ unzip -p "$OUT_JAR" META-INF/MANIFEST.MF |
 
 native_sha="$(sha256sum "$NATIVE_LIB" | awk '{print $1}')"
 embedded_sha="$(unzip -p "$OUT_JAR" "$RESOURCE_PATH" | sha256sum | awk '{print $1}')"
+
 [ "$native_sha" = "$embedded_sha" ] || {
   echo "::error::Embedded native SHA-256 mismatch: source=$native_sha embedded=$embedded_sha"
   exit 1
@@ -299,13 +291,14 @@ embedded_sha="$(unzip -p "$OUT_JAR" "$RESOURCE_PATH" | sha256sum | awk '{print $
 
 echo "Arc revision: $actual_arc"
 echo "SDL source version: $header_version"
-echo "Android Java sources:"
+echo "Android API jar: $ANDROID_JAR"
+echo "SDL Android Java source files:"
 printf '  %s\n' "$ACTIVITY_SOURCE" "$SDL_SOURCE" "$AUDIO_SOURCE" "$CONTROLLER_SOURCE"
 echo "Direct JNI_OnLoad Java classes:"
 printf '  %s\n' "${DIRECT_CLASSES[@]}"
+echo "SDLInputConnection source declaration: SDLActivity.java (top-level class)"
 echo "Native SHA-256: $native_sha"
 echo "Embedded native SHA-256: $embedded_sha"
-echo "Verified exact four direct JNI_OnLoad classes"
+echo "Verified exact four direct JNI_OnLoad classes only"
 echo "Verified real libsdl-arc.so resource"
-echo "Verified no SDL Java stub/fake implementation"
 echo "Android JNI glue absolute-load diagnostic package: PASS"
