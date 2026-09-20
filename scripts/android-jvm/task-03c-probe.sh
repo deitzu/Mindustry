@@ -135,7 +135,6 @@ fi
 
 echo "== TASK 03C: package Android ARM64 JNI library =="
 ( cd "$ARC_DIR" && ./gradlew ":backends:backend-sdl:$ANDROID_PACKAGE_TASK" --stacktrace )
-echo "Android packaging task: :backends:backend-sdl:$ANDROID_PACKAGE_TASK"
 
 echo "== TASK 03C: locate Android native package =="
 PACKAGE_JAR=""
@@ -143,7 +142,26 @@ PACKAGE_ENTRY=""
 while IFS= read -r candidate; do
   [ -f "$candidate" ] || continue
   while IFS= read -r entry; do
-    if printf '%s\n' "$entry" | grep -Eq '(^|/)libsdl-arc\.so
+    if printf '%s\n' "$entry" | grep -Eq '(^|/)libsdl-arc\.so$' && printf '%s\n' "$entry" | grep -Fq 'arm64-v8a'; then
+      PACKAGE_JAR="$candidate"
+      PACKAGE_ENTRY="$entry"
+      break
+    fi
+  done < <(jar tf "$candidate" 2>/dev/null || true)
+  [ -n "$PACKAGE_JAR" ] && break
+done < <(find "$ARC_DIR/backends/backend-sdl" -type f -name '*.jar' -print)
+
+[ -n "$PACKAGE_JAR" ] || {
+  echo "::error::No Android ARM64 native JAR containing libsdl-arc.so was found"
+  find "$ARC_DIR/backends/backend-sdl" -type f -name '*.jar' -print || true
+  exit 1
+}
+echo "Android ARM64 native package: $PACKAGE_JAR"
+echo "Android ARM64 package entry: $PACKAGE_ENTRY"
+cp "$PACKAGE_JAR" "$OUT/$(basename "$PACKAGE_JAR")"
+printf 'Package task=%s\nPackage path=%s\nPackage entry=%s\n' "$ANDROID_PACKAGE_TASK" "$PACKAGE_JAR" "$PACKAGE_ENTRY" | tee "$OUT/package-summary.txt"
+
+echo "== TASK 03C: locate Android ARM64 JNI library =="
 mapfile -t candidates < <(find "$ARC_DIR/backends/backend-sdl" -type f -name '*.so' -print)
 probe=""
 for candidate in "${candidates[@]}"; do
@@ -201,70 +219,4 @@ echo "SDL JNI symbol count: $jni_sdl_count" | tee -a "$OUT/verification-summary.
 echo "SDLGL JNI symbol count: $jni_sdlgl_count" | tee -a "$OUT/verification-summary.txt"
 echo "Forbidden dependency scan: PASS" | tee -a "$OUT/verification-summary.txt"
 echo "JNI symbol surface: PASS" | tee -a "$OUT/verification-summary.txt"
-echo "Android native probe: PASS" | tee -a "$OUT/verification-summary.txt"
- && printf '%s\n' "$entry" | grep -Fq 'arm64-v8a'; then
-      PACKAGE_JAR="$candidate"
-      PACKAGE_ENTRY="$entry"
-      break
-    fi
-  done < <(jar tf "$candidate" 2>/dev/null || true)
-  [ -n "$PACKAGE_JAR" ] && break
-done < <(find "$ARC_DIR/backends/backend-sdl" -type f -name '*.jar' -print)
-
-[ -n "$PACKAGE_JAR" ] || {
-  echo "::error::No Android ARM64 native JAR containing libsdl-arc.so was found"
-  find "$ARC_DIR/backends/backend-sdl" -type f -name '*.jar' -print || true
-  exit 1
-}
-echo "Android ARM64 native package: $PACKAGE_JAR"
-echo "Android ARM64 package entry: $PACKAGE_ENTRY"
-cp "$PACKAGE_JAR" "$OUT/$(basename "$PACKAGE_JAR")"
-printf 'Package task=%s\nPackage path=%s\nPackage entry=%s\n' "$ANDROID_PACKAGE_TASK" "$PACKAGE_JAR" "$PACKAGE_ENTRY" | tee "$OUT/package-summary.txt"
-
-echo "== TASK 03C: locate Android ARM64 JNI library =="
-mapfile -t candidates < <(find "$ARC_DIR/backends/backend-sdl" -type f -name '*.so' -print)
-probe=""
-for candidate in "${candidates[@]}"; do
-  if "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -h "$candidate" 2>/dev/null | grep -q 'Machine:.*AArch64'; then
-    probe="$candidate"
-    break
-  fi
-done
-[ -n "$probe" ] || {
-  echo "::error::No AArch64 backend-sdl JNI .so was found"
-  printf '%s\n' "${candidates[@]}"
-  exit 1
-}
-echo "Android ARM64 JNI library: $probe"
-cp "$probe" "$OUT/$(basename "$probe")"
-
-READELF="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
-[ -x "$READELF" ] || { echo "::error::NDK llvm-readelf not found"; exit 1; }
-HEADER="$OUT/readelf-header.txt"
-PROGRAM="$OUT/readelf-program-headers.txt"
-DYNAMIC="$OUT/readelf-dynamic.txt"
-SYMBOLS="$OUT/readelf-symbols.txt"
-"$READELF" -h "$probe" | tee "$HEADER"
-"$READELF" -l "$probe" | tee "$PROGRAM"
-"$READELF" -d "$probe" | tee "$DYNAMIC"
-"$READELF" -Ws "$probe" | tee "$SYMBOLS"
-
-machine="$($READELF -h "$probe" | awk -F: '/Machine:/{gsub(/^ +/,"",$2); print $2}')"
-class="$($READELF -h "$probe" | awk -F: '/Class:/{gsub(/^ +/,"",$2); print $2}')"
-soname="$($READELF -d "$probe" | sed -n 's/.*SONAME.*\[\(.*\)\].*/\1/p' | head -n 1 || true)"
-printf 'TASK_03C\nArc revision=%s\nSDL version=%s\nSDL ABI=arm64-v8a\nNative task=%s\nOutput path=%s\nELF class=%s\nELF machine=%s\nSONAME=%s\n' "$post_arc" "$header_version" "$ANDROID_TASK" "$probe" "$class" "$machine" "${soname:-<none>}" | tee "$OUT/verification-summary.txt"
-"$READELF" -d "$probe" | sed -n 's/.*NEEDED.*\[\(.*\)\].*/\1/p' | tee "$OUT/dt-needed.txt"
-
-forbidden_patterns=('libGL.so.1' 'libSDL2-2.0.so.0' 'libc.so.6' 'ld-linux-aarch64.so.1' 'GLEW')
-for forbidden in "${forbidden_patterns[@]}"; do
-  if grep -Fqi "$forbidden" "$DYNAMIC" "$OUT/dt-needed.txt" "$SYMBOLS"; then
-    echo "::error::Forbidden dependency/symbol detected: $forbidden"
-    exit 1
-  fi
-done
-
-jni_count="$(grep -c 'Java_arc_backend_sdl_jni_' "$SYMBOLS" || true)"
-[ "$jni_count" -gt 0 ] || { echo "::error::No generated Arc SDL JNI symbols found"; exit 1; }
-echo "JNI symbol count: $jni_count" | tee -a "$OUT/verification-summary.txt"
-echo "Forbidden dependency scan: PASS" | tee -a "$OUT/verification-summary.txt"
 echo "Android native probe: PASS" | tee -a "$OUT/verification-summary.txt"
