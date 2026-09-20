@@ -22,6 +22,8 @@ SDL_SOURCE="$ANDROID_JAVA_ROOT/org/libsdl/app/SDL.java"
 AUDIO_SOURCE="$ANDROID_JAVA_ROOT/org/libsdl/app/SDLAudioManager.java"
 CONTROLLER_SOURCE="$ANDROID_JAVA_ROOT/org/libsdl/app/SDLControllerManager.java"
 DIRECT_CLASSES=(SDLActivity SDLInputConnection SDLAudioManager SDLControllerManager)
+EXTRA_CLASSES=(SDLJoystickHandler)
+PACKAGE_CLASSES=("${DIRECT_CLASSES[@]}" "${EXTRA_CLASSES[@]}")
 
 [ -f "$NATIVE_LIB" ] || {
   echo "::error::Native library not found: $NATIVE_LIB"
@@ -91,6 +93,11 @@ for source in "$ACTIVITY_SOURCE" "$SDL_SOURCE" "$AUDIO_SOURCE" "$CONTROLLER_SOUR
     exit 1
   }
 done
+
+grep -Eq "^[[:space:]]*class[[:space:]]+SDLJoystickHandler[[:space:]]*[{]" "$CONTROLLER_SOURCE" || {
+  echo "::error::Expected SDLJoystickHandler class declaration not found: $CONTROLLER_SOURCE"
+  exit 1
+}
 
 SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
 [ -n "$SDK_ROOT" ] || {
@@ -264,9 +271,9 @@ javac -source 8 -target 8 -proc:none \
   "$CONTROLLER_SOURCE" \
   "$PROBE_SRC"
 
-echo "== TASK 03C-DEBUG-14: stage only four direct JNI_OnLoad classes =="
+echo "== TASK 03C-DEBUG-16: stage DEBUG-14 classes plus exactly SDLJoystickHandler =="
 
-for class_name in "${DIRECT_CLASSES[@]}"; do
+for class_name in "${PACKAGE_CLASSES[@]}"; do
   class_file="$CLS/org/libsdl/app/$class_name.class"
   [ -f "$class_file" ] || {
     echo "::error::Expected JNI_OnLoad class missing: $class_file"
@@ -304,6 +311,7 @@ expected_java_classes=(
   'org/libsdl/app/SDLAudioManager.class'
   'org/libsdl/app/SDLControllerManager.class'
   'org/libsdl/app/SDLInputConnection.class'
+  'org/libsdl/app/SDLJoystickHandler.class'
 )
 
 diff -u \
@@ -328,11 +336,14 @@ echo "SDL source commit: $actual_sdl_commit"
 echo "Android API jar: $ANDROID_JAR"
 echo "SDL Android Java source files:"
 printf '  %s\n' "$ACTIVITY_SOURCE" "$SDL_SOURCE" "$AUDIO_SOURCE" "$CONTROLLER_SOURCE"
-echo "Direct JNI_OnLoad Java classes:"
+echo "DEBUG-14 direct JNI_OnLoad Java classes:"
 printf '  %s\n' "${DIRECT_CLASSES[@]}"
+echo "DEBUG-16 additional Java class:"
+printf '  %s\n' "${EXTRA_CLASSES[@]}"
 echo "SDLInputConnection source declaration: SDLActivity.java (top-level class)"
+echo "SDLJoystickHandler source location: SDLControllerManager.java (top-level package-private class)"
 echo "Native SHA-256: $native_sha"
 echo "Embedded native SHA-256: $embedded_sha"
-echo "Verified exact four direct JNI_OnLoad classes only"
+echo "Verified DEBUG-14 four direct JNI_OnLoad classes plus exactly SDLJoystickHandler"
 echo "Verified real libsdl-arc.so resource"
 echo "Android JNI glue absolute-load diagnostic package: PASS"
