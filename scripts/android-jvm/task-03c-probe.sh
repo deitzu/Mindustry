@@ -92,22 +92,11 @@ SDL_STATIC="$SDL_BUILD/libSDL2.a"
 echo "SDL static archive: $SDL_STATIC"
 "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar" t "$SDL_STATIC" | head -n 10
 
-echo "== TASK 03C: inspect Gradle task graph =="
-TASKS_FILE="$OUT/backend-sdl-tasks.txt"
-( cd "$ARC_DIR" && ./gradlew :backends:backend-sdl:tasks --all ) | tee "$TASKS_FILE"
-ANDROID_TASK="$(awk '$1 ~ /^jnigenBuild/ && /Android/ {print $1; exit}' "$TASKS_FILE")"
-ANDROID_PACKAGE_TASK="$(awk '$1 ~ /^jnigenPackageAndroid_/ && /arm64-v8a/ {print $1; exit}' "$TASKS_FILE")"
-if [ -z "$ANDROID_PACKAGE_TASK" ]; then
-  ANDROID_PACKAGE_TASK="$(awk '$1 ~ /^jnigenPackageAllAndroid$/ {print $1; exit}' "$TASKS_FILE")"
-fi
-if [ -z "$ANDROID_TASK" ] || [ -z "$ANDROID_PACKAGE_TASK" ]; then
-  echo "---- candidate jnigen Android tasks ----"
-  grep -Ei 'jnigen|android' "$TASKS_FILE" || true
-  echo "::error::Could not discover both Android native compilation and packaging tasks"
-  exit 1
-fi
-echo "Discovered Android native task: :backends:backend-sdl:$ANDROID_TASK"
-echo "Discovered Android packaging task: :backends:backend-sdl:$ANDROID_PACKAGE_TASK"
+echo "== TASK 03C: use confirmed jnigen Android tasks =="
+ANDROID_TASK="jnigenBuildAndroid_arm64-v8a"
+ANDROID_PACKAGE_TASK="jnigenPackageAndroid_arm64-v8a"
+echo "Confirmed Android native task: :backends:backend-sdl:$ANDROID_TASK"
+echo "Confirmed Android packaging task: :backends:backend-sdl:$ANDROID_PACKAGE_TASK"
 
 echo "== TASK 03C: generate jnigen sources =="
 ( cd "$ARC_DIR" && ./gradlew :backends:backend-sdl:jnigen --stacktrace )
