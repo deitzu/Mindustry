@@ -98,9 +98,9 @@ public class Task02dVerify02PackagingTest{
         String desktopBuild = Files.readString(root.resolve("desktop/build.gradle"));
         assertTrue(desktopBuild.contains("configurations.runtimeClasspath.collect{ it.isDirectory() ? it : zipTree(it) }"),
             "desktop/build.gradle does not use normal runtimeClasspath assembly");
-        assertFalse(desktopBuild.contains("exclude("arc/util/SharedLibraryLoader.class")"),
+        assertFalse(desktopBuild.contains("SharedLibraryLoader.class"),
             "SharedLibraryLoader exclusion workaround is still present");
-        assertFalse(desktopBuild.contains("from("../Arc/arc-core/build/classes/java/main")"),
+        assertFalse(desktopBuild.contains("arc-core/build/classes/java/main"),
             "manual Arc class injection workaround is still present");
 
         Path patch = root.resolve("ci/android-jvm/task02d-arc-shared-library-loader.patch");
