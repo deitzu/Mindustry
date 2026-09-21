@@ -278,6 +278,67 @@ jobs:
             exit 1
           fi
 
+      - name: DEBUG-01 inspect Android-JVM runtimeClasspath packaging inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci-artifacts/task04-debug01
+
+          cat > ci-artifacts/task04-debug01/runtime-classpath-init.gradle <<'GRADLE'
+          allprojects{
+              afterEvaluate{ project ->
+                  if(project.path == ':desktop'){
+                      project.tasks.matching{ it.name == 'dist' }.configureEach{
+                          doFirst{
+                              def files = project.configurations.runtimeClasspath.resolve()
+                              def index = 0
+                              println '== DEBUG-01 runtimeClasspath resolved inputs =='
+                              files.each{ file ->
+                                  index++
+                                  def classEntry = new File(file, 'arc/util/SharedLibraryLoader.class')
+                                  boolean contains = false
+                                  byte[] bytes = null
+
+                                  if(file.isDirectory()){
+                                      contains = classEntry.isFile()
+                                      if(contains) bytes = classEntry.bytes
+                                  }else if(file.name.endsWith('.jar')){
+                                      new java.util.zip.ZipFile(file).withCloseable{ zip ->
+                                          def entry = zip.getEntry('arc/util/SharedLibraryLoader.class')
+                                          contains = entry != null
+                                          if(contains) zip.getInputStream(entry).withCloseable{ input -> bytes = input.bytes }
+                                      }
+                                  }
+
+                                  println 'RUNTIME_INPUT[' + index + ']: ' + file.absolutePath
+                                  println 'RUNTIME_INPUT[' + index + ']_IS_ARC: ' + file.absolutePath.startsWith(new File(project.rootDir.parent, 'Arc').absolutePath + File.separator)
+                                  println 'RUNTIME_INPUT[' + index + ']_HAS_SHARED_LIBRARY_LOADER: ' + contains
+                                  if(contains){
+                                      def hash = java.security.MessageDigest.getInstance('SHA-256').digest(bytes).encodeHex().toString()
+                                      println 'RUNTIME_INPUT[' + index + ']_SHARED_LIBRARY_LOADER_SHA256: ' + hash
+                                      def javap = ['javap','-classpath',file.absolutePath,'-c','-p','arc.util.SharedLibraryLoader'].execute()
+                                      println 'RUNTIME_INPUT[' + index + ']_JAVAP_START'
+                                      println javap.text
+                                      println 'RUNTIME_INPUT[' + index + ']_JAVAP_EXIT: ' + javap.waitFor()
+                                  }
+                              }
+
+                              project.sourceSets.main.output.classesDirs.files.each{ dir ->
+                                  def own = new File(dir, 'arc/util/SharedLibraryLoader.class')
+                                  println 'DESKTOP_OUTPUT[' + dir.absolutePath + ']_HAS_SHARED_LIBRARY_LOADER: ' + own.isFile()
+                                  if(own.isFile()){
+                                      println 'DESKTOP_OUTPUT[' + dir.absolutePath + ']_SHARED_LIBRARY_LOADER_SHA256: ' + java.security.MessageDigest.getInstance('SHA-256').digest(own.bytes).encodeHex().toString()
+                                  }
+                              }
+                          }
+                      }
+                  }
+              }
+          }
+          GRADLE
+
+          ./gradlew -PandroidJvm :desktop:dist --rerun-tasks --stacktrace --console=plain --init-script ci-artifacts/task04-debug01/runtime-classpath-init.gradle | tee ci-artifacts/task04-debug01/desktop-dist-debug.log
+          test -s ci-artifacts/task04-debug01/desktop-dist-debug.log
       - name: Package Android-JVM Arc native artifact
         shell: bash
         run: |
