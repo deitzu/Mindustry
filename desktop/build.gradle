@@ -74,7 +74,8 @@ if(project.hasProperty("androidJvm")){
         sourceCompatibility = "8"
         targetCompatibility = "8"
         options.encoding = "UTF-8"
-        options.compilerArgs += ["-proc:none", "-sourcepath", androidSdlJavaRoot.absolutePath]
+        options.compilerArgs += ["-proc:none"]
+        options.sourcepath = files(androidSdlJavaRoot)
 
         doFirst{
             if(!androidSdlRoot.isDirectory()){
