@@ -93,12 +93,12 @@ expected_sdl_java_classes=(
 mapfile -t packaged_sdl_java_classes < <(
     jar tf "$JAR" |
         grep -E '^org/libsdl/app/[^/]+\.class$' |
-        sort
+        LC_ALL=C sort
 )
 printf '%s\n' "${packaged_sdl_java_classes[@]}" | tee "$OUT/sdl-java-glue-entries.txt"
 diff -u \
-    <(printf '%s\n' "${expected_sdl_java_classes[@]}") \
-    <(printf '%s\n' "${packaged_sdl_java_classes[@]}") || {
+    <(printf '%s\n' "${expected_sdl_java_classes[@]}" | LC_ALL=C sort) \
+    <(printf '%s\n' "${packaged_sdl_java_classes[@]}" | LC_ALL=C sort) || {
     echo "::error::Android-JVM JAR does not contain exactly the required SDL Android Java glue class set"
     exit 1
 }
