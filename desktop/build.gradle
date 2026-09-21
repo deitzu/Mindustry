@@ -49,22 +49,8 @@ tasks.register('dist', Jar){
         configurations.runtimeClasspath.collect{ it.isDirectory() ? it : zipTree(it) }
     }
 
-    if(project.hasProperty("androidJvm")){
-        // The Android JVM build uses the deterministically patched Arc loader.
-        // Remove only the duplicate Arc loader class from the dependency assembly,
-        // then inject the freshly rebuilt class from the pinned Arc checkout.
-        from{
-            runtimeClasspathContents()
-        }{
-            exclude("arc/util/SharedLibraryLoader.class")
-        }
-        from("../Arc/arc-core/build/classes/java/main"){
-            include("arc/util/SharedLibraryLoader.class")
-        }
-    }else{
-        from{
-            runtimeClasspathContents()
-        }
+    from{
+        runtimeClasspathContents()
     }
 
     from files(project.assetsDir)
