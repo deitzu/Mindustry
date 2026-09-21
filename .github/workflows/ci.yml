@@ -205,6 +205,29 @@ jobs:
           echo "ndk-build on PATH: $resolved_ndk_build"
           echo "CMake: $cmake_bin"
 
+      - name: Checkout pinned SDL 2.32.8 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDL_DIR="$GITHUB_WORKSPACE/../SDL2-2.32.8"
+          SDL_COMMIT="98d1f3a45aae568ccd6ed5fec179330f47d4d356"
+          rm -rf "$SDL_DIR"
+          git clone --no-tags --filter=blob:none --depth=1 https://github.com/libsdl-org/SDL "$SDL_DIR"
+          git -C "$SDL_DIR" fetch --no-tags --depth=1 origin "$SDL_COMMIT"
+          git -C "$SDL_DIR" checkout --detach "$SDL_COMMIT"
+          actual_sdl="$(git -C "$SDL_DIR" rev-parse HEAD)"
+          [ "$actual_sdl" = "$SDL_COMMIT" ] || {
+            echo "::error::SDL checkout mismatch: expected $SDL_COMMIT, got $actual_sdl"
+            exit 1
+          }
+          header_version="$(awk '/^#define SDL_MAJOR_VERSION[[:space:]]/ {major=$3} /^#define SDL_MINOR_VERSION[[:space:]]/ {minor=$3} /^#define SDL_PATCHLEVEL[[:space:]]/ {patch=$3} END {if(major == "" || minor == "" || patch == "") exit 1; print major "." minor "." patch}' "$SDL_DIR/include/SDL_version.h")"
+          [ "$header_version" = "2.32.8" ] || {
+            echo "::error::SDL source version mismatch: expected 2.32.8, got $header_version"
+            exit 1
+          }
+          echo "SDL revision: $actual_sdl"
+          echo "SDL version: $header_version"
+
       - name: Run Android ARM64 SDL native probe
         shell: bash
         run: bash scripts/android-jvm/task-03c-probe.sh
