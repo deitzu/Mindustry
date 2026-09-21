@@ -89,9 +89,9 @@ if(project.hasProperty("androidJvm")){
                 throw new GradleException("SDL version header is missing: " + sdlVersionHeader)
             }
             def sdlVersionText = sdlVersionHeader.text
-            def sdlMajorMatch = (sdlVersionText =~ /(?m)^#define SDL_MAJOR_VERSION\\s+(\\d+)/)
-            def sdlMinorMatch = (sdlVersionText =~ /(?m)^#define SDL_MINOR_VERSION\\s+(\\d+)/)
-            def sdlPatchMatch = (sdlVersionText =~ /(?m)^#define SDL_PATCHLEVEL\\s+(\\d+)/)
+            def sdlMajorMatch = (sdlVersionText =~ /(?m)^#define SDL_MAJOR_VERSION\s+(\d+)/)
+            def sdlMinorMatch = (sdlVersionText =~ /(?m)^#define SDL_MINOR_VERSION\s+(\d+)/)
+            def sdlPatchMatch = (sdlVersionText =~ /(?m)^#define SDL_PATCHLEVEL\s+(\d+)/)
             if(!sdlMajorMatch.find() || !sdlMinorMatch.find() || !sdlPatchMatch.find()){
                 throw new GradleException("SDL version macros are missing from: " + sdlVersionHeader)
             }
