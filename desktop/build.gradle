@@ -1,6 +1,6 @@
 sourceSets.main.java.srcDirs = ["src/"]
 
-project.ext.mainClassName = "mindustry.desktop.DesktopLauncher"
+project.ext.mainClassName = project.hasProperty("androidJvm") ? "mindustry.androidjvm.AndroidJvmLauncher" : "mindustry.desktop.DesktopLauncher"
 project.ext.assetsDir = new File("../core/assets")
 
 def JDK_DIR = "$System.env.JDK_DIR"
