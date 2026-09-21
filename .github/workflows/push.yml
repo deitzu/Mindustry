@@ -56,7 +56,10 @@ jobs:
           git push
         fi
 
-  task02d-verify:
+    - name: Run unit tests
+      run: ./gradlew tests:test --rerun --stacktrace
+
+task02d-verify:
     name: TASK-02D VERIFY-02 packaging verification
     runs-on: ubuntu-latest
     permissions:
@@ -256,5 +259,3 @@ EOF
         path: ci-artifacts/task02d-verify02
         if-no-files-found: error
 
-    - name: Run unit tests
-      run: ./gradlew tests:test --rerun --stacktrace
