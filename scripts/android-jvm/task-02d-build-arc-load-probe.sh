@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MINDUSTRY_JAR="\${1:?usage: \$0 <Mindustry-android-jvm.jar> [output-dir]}"
-OUT_DIR="\${2:-ci-artifacts/task02d}"
+MINDUSTRY_JAR="${1:?usage: $0 <Mindustry-android-jvm.jar> [output-dir]}"
+OUT_DIR="${2:-ci-artifacts/task02d}"
 EXPECTED_ARC_SHA256="ad3b718db318332446deaf4db79462edd1954612ce88e5515c949ba62bbc4338"
 
 [ -f "$MINDUSTRY_JAR" ] || {
