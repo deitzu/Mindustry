@@ -77,6 +77,127 @@ tasks.register('dist', Jar){
     }
 }
 
+
+/*
+ * TASK-02D VERIFY-02 TEMPORARY CI DIAGNOSTIC.
+ * Reads Gradle packaging inputs and verifies produced artifacts only.
+ * Remove this block after verification.
+ */
+if(project.hasProperty("androidJvm")){
+    tasks.named("dist").configure{
+        doFirst{
+            println "== TASK-02D VERIFY-02: runtimeClasspath resolution =="
+
+            configurations.runtimeClasspath.incoming.resolutionResult.allComponents.each{ component ->
+                println "RUNTIME_COMPONENT: " + component.id.displayName + " :: " + component.id.class.name
+            }
+
+            configurations.runtimeClasspath.resolve().sort{a, b -> a.absolutePath <=> b.absolutePath}.each{ file ->
+                boolean containsLoader = false
+                if(file.isDirectory()){
+                    containsLoader = new File(file, "arc/util/SharedLibraryLoader.class").isFile()
+                }else if(file.name.endsWith(".jar")){
+                    new java.util.zip.ZipFile(file).withCloseable{ zip ->
+                        containsLoader = zip.getEntry("arc/util/SharedLibraryLoader.class") != null
+                    }
+                }
+                println "RUNTIME_FILE: " + file.absolutePath + (containsLoader ? " [SharedLibraryLoader.class]" : "")
+            }
+        }
+
+        doLast{
+            def outputJar = archiveFile.get().asFile
+            if(!outputJar.isFile()){
+                throw new GradleException("TASK-02D VERIFY-02 Mindustry JAR missing: " + outputJar)
+            }
+
+            println "== TASK-02D VERIFY-02: final Mindustry JAR =="
+            println "MINDUSTRY_JAR: " + outputJar.absolutePath
+            println "MINDUSTRY_JAR_SIZE: " + outputJar.length()
+
+            new java.util.zip.ZipFile(outputJar).withCloseable{ zip ->
+                def loaderEntry = zip.getEntry("arc/util/SharedLibraryLoader.class")
+                def nativeEntry = zip.getEntry("arm64-v8a/libarc.so")
+
+                println "JAR_ENTRY SharedLibraryLoader.class: " + (loaderEntry != null)
+                println "JAR_ENTRY arm64-v8a/libarc.so: " + (nativeEntry != null)
+
+                if(loaderEntry == null){
+                    throw new GradleException("TASK-02D VERIFY-02 missing arc/util/SharedLibraryLoader.class")
+                }
+                if(nativeEntry == null){
+                    throw new GradleException("TASK-02D VERIFY-02 missing arm64-v8a/libarc.so")
+                }
+
+                def javapProcess = ["javap", "-classpath", outputJar.absolutePath, "-c", "-p", "arc.util.SharedLibraryLoader"]
+                    .execute()
+                def javapOut = javapProcess.text
+                def javapExit = javapProcess.waitFor()
+                println "== TASK-02D VERIFY-02: packaged SharedLibraryLoader.javap =="
+                println javapOut
+                if(javapExit != 0 ||
+                    !javapOut.contains("isAndroidRuntime") ||
+                    !javapOut.contains("androidResourcePath") ||
+                    !javapOut.contains("System.load")){
+                    throw new GradleException("TASK-02D VERIFY-02 packaged SharedLibraryLoader bytecode verification failed")
+                }
+
+                def nativeOut = new File(buildDir, "task02d-verify02/libarc.so")
+                nativeOut.parentFile.mkdirs()
+                zip.getInputStream(nativeEntry).withCloseable{ input ->
+                    nativeOut.bytes = input.bytes
+                }
+
+                def readelf = ["readelf", "-h", nativeOut.absolutePath].execute()
+                def header = readelf.text
+                def headerExit = readelf.waitFor()
+                println "== TASK-02D VERIFY-02: libarc.so ELF header =="
+                println header
+                if(headerExit != 0 || !header.contains("Class:") || !header.contains("ELF64") || !header.contains("Machine:") || !header.contains("AArch64")){
+                    throw new GradleException("TASK-02D VERIFY-02 libarc.so ELF verification failed")
+                }
+
+                def dynProcess = ["readelf", "-d", nativeOut.absolutePath].execute()
+                def dynamic = dynProcess.text
+                def dynamicExit = dynProcess.waitFor()
+                println "== TASK-02D VERIFY-02: libarc.so dynamic section =="
+                println dynamic
+                if(dynamicExit != 0){
+                    throw new GradleException("TASK-02D VERIFY-02 libarc.so dynamic inspection failed")
+                }
+
+                def soname = (dynamic =~ /SONAME.*\[([^\]]+)\]/)
+                if(soname.find()){
+                    println "LIBARC_SONAME: " + soname.group(1)
+                }else{
+                    println "LIBARC_SONAME: ABSENT"
+                }
+
+                def forbidden = [
+                    "libpthread.so.0",
+                    "libdl.so.2",
+                    "libm.so.6",
+                    "libc.so.6",
+                    "libstdc++.so.6",
+                    "libgcc_s.so.1",
+                    "ld-linux-aarch64.so.1",
+                    "libGL.so.1",
+                    "libSDL2-2.0.so.0"
+                ]
+                forbidden.each{ name ->
+                    if(dynamic.contains("[" + name + "]")){
+                        throw new GradleException("TASK-02D VERIFY-02 forbidden native dependency: " + name)
+                    }
+                }
+
+                println "LIBARC_FORBIDDEN_DEPENDENCY_SCAN: PASS"
+            }
+
+            println "TASK-02D VERIFY-02 final artifact inspection: PASS"
+        }
+    }
+}
+
 if(!project.ext.hasSprites() && System.getenv("JITPACK") != "true"){
     println "Scheduling sprite packing."
     run.dependsOn ":tools:pack"
