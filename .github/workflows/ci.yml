@@ -263,6 +263,55 @@ jobs:
 
           echo "Patched Arc SharedLibraryLoader.class verified in composite-build output"
 
+      - name: VERIFY-02 inspect Arc JAR and resolved runtime artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci-artifacts/task02d-verify02
+
+          ./gradlew :Arc:arc-core:jar --rerun-tasks --stacktrace --console=plain
+
+          mapfile -t ARC_JARS < <(
+            find "$GITHUB_WORKSPACE/../Arc/arc-core/build/libs" -maxdepth 1 -type f -name 'arc-core*.jar'               ! -name '*-sources.jar' ! -name '*-javadoc.jar' | sort
+          )
+          test "${#ARC_JARS[@]}" -ge 1
+          ARC_JAR="${ARC_JARS[0]}"
+          echo "ACTUAL_ARC_CORE_JAR=$ARC_JAR"
+          jar tf "$ARC_JAR" |
+            tee ci-artifacts/task02d-verify02/arc-core-jar-contents.txt
+          grep -Fxq 'arc/util/SharedLibraryLoader.class' ci-artifacts/task02d-verify02/arc-core-jar-contents.txt
+
+          ./gradlew -PandroidJvm :desktop:dependencies --configuration runtimeClasspath --console=plain |
+            tee ci-artifacts/task02d-verify02/runtimeClasspath-dependencies.txt
+          grep -Fq 'com.github.Anuken:arc-core:8eb00ffff0 -> project :Arc:arc-core'             ci-artifacts/task02d-verify02/runtimeClasspath-dependencies.txt
+
+          cat > ci-artifacts/task02d-verify02/runtimeClasspath.init.gradle <<'EOF'
+allprojects {
+    afterEvaluate { p ->
+        if (p.path == ':desktop') {
+            p.tasks.register('task02dVerifyRuntimeClasspath') {
+                doLast {
+                    p.configurations.runtimeClasspath.resolve().sort { a, b -> a.absolutePath <=> b.absolutePath }.each {
+                        println "RUNTIME_FILE=${it.absolutePath}"
+                    }
+                }
+            }
+        }
+    }
+}
+EOF
+
+          ./gradlew -PandroidJvm             --init-script ci-artifacts/task02d-verify02/runtimeClasspath.init.gradle             :desktop:task02dVerifyRuntimeClasspath             --console=plain |
+            tee ci-artifacts/task02d-verify02/runtimeClasspath-files.txt
+
+          grep -Fq '/Arc/arc-core/build/libs/' ci-artifacts/task02d-verify02/runtimeClasspath-files.txt
+
+          ARC_RUNTIME_FILE="$(grep 'RUNTIME_FILE=' ci-artifacts/task02d-verify02/runtimeClasspath-files.txt |
+            grep '/Arc/arc-core/build/libs/' | head -n1 | sed 's/^RUNTIME_FILE=//')"
+          test -f "$ARC_RUNTIME_FILE"
+          echo "PHYSICAL_ARC_RUNTIME_ARTIFACT=$ARC_RUNTIME_FILE"
+          jar tf "$ARC_RUNTIME_FILE" | grep -Fxq 'arc/util/SharedLibraryLoader.class'
+
       - name: Inspect Android-JVM runtime dependency graph
         shell: bash
         run: |
@@ -299,6 +348,58 @@ jobs:
           cp desktop/build/libs/Mindustry.jar ci-artifacts/task02c/Mindustry-android-jvm.jar
           bash scripts/android-jvm/task-02c-verify-packaging.sh ci-artifacts/task02c/Mindustry-android-jvm.jar
 
+      - name: VERIFY-02 inspect final Mindustry JAR and Android ARM64 libarc
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci-artifacts/task02d-verify02
+          JAR="desktop/build/libs/Mindustry.jar"
+          test -f "$JAR"
+
+          jar tf "$JAR" |
+            tee ci-artifacts/task02d-verify02/Mindustry-jar-contents.txt
+          grep -Fxq 'arc/util/SharedLibraryLoader.class' ci-artifacts/task02d-verify02/Mindustry-jar-contents.txt
+          grep -Fxq 'arm64-v8a/libarc.so' ci-artifacts/task02d-verify02/Mindustry-jar-contents.txt
+
+          javap -classpath "$JAR" -c -p arc.util.SharedLibraryLoader |
+            tee ci-artifacts/task02d-verify02/packaged-shared-library-loader.javap.txt >/dev/null
+          grep -Fq 'isAndroidRuntime' ci-artifacts/task02d-verify02/packaged-shared-library-loader.javap.txt
+          grep -Fq 'androidResourcePath' ci-artifacts/task02d-verify02/packaged-shared-library-loader.javap.txt
+          grep -Fq 'System.load' ci-artifacts/task02d-verify02/packaged-shared-library-loader.javap.txt
+
+          unzip -p "$JAR" arm64-v8a/libarc.so > ci-artifacts/task02d-verify02/libarc.so
+          test -s ci-artifacts/task02d-verify02/libarc.so
+
+          READELF="$(command -v llvm-readelf || command -v readelf || true)"
+          test -n "$READELF"
+          "$READELF" -h ci-artifacts/task02d-verify02/libarc.so |
+            tee ci-artifacts/task02d-verify02/libarc-readelf-header.txt
+          "$READELF" -d ci-artifacts/task02d-verify02/libarc.so |
+            tee ci-artifacts/task02d-verify02/libarc-readelf-dynamic.txt
+
+          CLASS="$($READELF -h ci-artifacts/task02d-verify02/libarc.so | awk -F: '/Class:/{gsub(/^ +/,"",$2); print $2}')"
+          MACHINE="$($READELF -h ci-artifacts/task02d-verify02/libarc.so | awk -F: '/Machine:/{gsub(/^ +/,"",$2); print $2}')"
+          test "$CLASS" = "ELF64"
+          printf '%s' "$MACHINE" | grep -q 'AArch64'
+
+          "$READELF" -d ci-artifacts/task02d-verify02/libarc.so |
+            sed -n 's/.*SONAME.*\[\(.*\)\].*/\1/p' | head -n1 |
+            tee ci-artifacts/task02d-verify02/soname.txt
+
+          "$READELF" -d ci-artifacts/task02d-verify02/libarc.so |
+            sed -n 's/.*NEEDED.*\[\(.*\)\].*/\1/p' |
+            tee ci-artifacts/task02d-verify02/dt-needed.txt
+
+          for forbidden in libpthread.so.0 libdl.so.2 libm.so.6 libc.so.6 libstdc++.so.6 libgcc_s.so.1 ld-linux-aarch64.so.1 libGL.so.1 libSDL2-2.0.so.0; do
+            ! grep -Fxq "$forbidden" ci-artifacts/task02d-verify02/dt-needed.txt || {
+              echo "::error::Forbidden dependency present: $forbidden"
+              exit 1
+            }
+          done
+
+          echo "FINAL_JAR_LOADER=PASS"
+          echo "FINAL_JAR_ANDROID_ARM64_ARC=PASS"
+          echo "FINAL_LIBARC_ELF=PASS"
       - name: Upload Android-JVM packaging proof
         uses: actions/upload-artifact@v7
         with:
