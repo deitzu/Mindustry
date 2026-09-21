@@ -2,25 +2,15 @@
 
 ## Status
 
-BLOCKED pending complete CI verification and physical Android ARM64 rerun.
-
-The implementation is committed on branch `android-jvm`. The known Android runtime blocker being addressed is:
-
-`NoClassDefFoundError: org/libsdl/app/SDLControllerManager`
-
-The current execution environment has no mounted Mindustry repository, no network access for a local clone, and no ADB-connected Android device, so a physical Mojo runtime rerun cannot be performed here.
+BLOCKED — production CI is not complete and physical Android ARM64 execution is unavailable in this environment.
 
 ## Objective
 
-Package the minimum SDL 2.32.8 Android Java JNI glue required by the Android-JVM `libsdl-arc.so` runtime, only when `-PandroidJvm` is active.
+Package the minimum SDL 2.32.8 Android Java JNI glue required by the confirmed Android-JVM runtime failure:
 
-## Scope
+`NoClassDefFoundError: org/libsdl/app/SDLControllerManager`
 
-Production packaging: `desktop/build.gradle`
-
-Packaging verification: `scripts/android-jvm/task-02c-verify-packaging.sh`
-
-This report documents the implementation and verification boundary. No upstream Arc source was modified or committed.
+The glue must be packaged only with `-PandroidJvm`. Normal desktop packaging must remain unchanged.
 
 ## Baseline
 
@@ -30,30 +20,30 @@ Baseline commit: `707d4d2791c0fe95af01dfae4c1ef54f70d618d0`
 
 Pinned Arc revision: `8eb00ffff0126d0576c67df46f99b8f6bccd96fe`
 
-SDL source: 2.32.8. The existing Android native probe obtains the `SDL2-2.32.8` release source used by this build.
+SDL: `2.32.8`
 
-## Current runtime failure
+SDL source commit: `98d1f3a45aae568ccd6ed5fec179330f47d4d356`
 
-Confirmed by Android runtime before this task:
+## Runtime blocker
+
+### Confirmed by Android runtime
+
+The previous real-device failure was:
 
 ```
 java.lang.NoClassDefFoundError: org/libsdl/app/SDLControllerManager
+
 Caused by: java.lang.ClassNotFoundException:
     org.libsdl.app.SDLControllerManager
 ```
 
-Earlier boundaries were already proven:
-
-- `arm64-v8a/libsdl-arc.so` resource discovery: PASS
-- native extraction: PASS
-- `System.load()` reached: PASS
-- failure occurred at Java SDL Android glue resolution
+The device had already passed Android SDL resource discovery and native file extraction, so this task targets Java SDL Android glue rather than the native `.so` path.
 
 ## Source evidence
 
-Confirmed from the SDL 2.32.8 Android Java source and existing repository diagnostic:
+### Confirmed by source
 
-Direct JNI glue classes:
+SDL 2.32.8 directly exposes these JNI classes:
 
 ```
 org/libsdl/app/SDLActivity.class
@@ -62,7 +52,7 @@ org/libsdl/app/SDLAudioManager.class
 org/libsdl/app/SDLControllerManager.class
 ```
 
-Required package-private helper classes from the same SDL sources:
+The relevant package-private dependency closure identified from the actual SDL sources is:
 
 ```
 org/libsdl/app/SDLJoystickHandler.class
@@ -72,138 +62,185 @@ org/libsdl/app/SDLHapticHandler.class
 org/libsdl/app/SDLHapticHandler_API26.class
 ```
 
-The two helper source groups are defined by SDL source layout rather than copied or reimplemented in Mindustry.
+No entire SDL Android project or APK is packaged.
 
 ## Implementation
 
-`desktop/build.gradle` now creates a dedicated `compileAndroidJvmSdlJavaGlue` JavaCompile task only under `-PandroidJvm`.
+### Confirmed by source/diff inspection
 
-The task:
+`desktop/build.gradle` now registers an Android-JVM-only `compileAndroidJvmSdlJavaGlue` task during project configuration.
 
-1. compiles only:
-   - `SDLActivity.java`
-   - `SDLAudioManager.java`
-   - `SDLControllerManager.java`
-2. uses the configured Android `android.jar`
-3. uses the SDL source path for Java source closure
-4. writes generated classes to:
-   `desktop/build/generated/android-jvm/sdl-java-glue/classes`
-5. packages only the exact nine required class files into the JAR
-6. validates SDL 2.32.8 from `include/SDL_version.h`
+It:
 
-The normal desktop build path does not create or package this Android Java task.
+- uses SDL 2.32.8 Android Java sources;
+- compiles against the configured Android `android.jar`;
+- validates the SDL source checkout is the pinned revision;
+- writes generated output under `desktop/build/generated/android-jvm/sdl-java-glue/classes`;
+- packages only the exact nine SDL Android glue class files;
+- remains inactive for normal desktop builds.
 
-A first implementation attempted to register the JavaCompile task from inside the `dist` task configuration. CI with Gradle 9.3.1 rejected that with:
-
-```
-DefaultTaskContainer#register(String, Class, Action)
-on task set cannot be executed in the current context.
-```
-
-The task was moved to project configuration and the JAR now consumes its output directory directly.
-
-A second CI failure showed that the SDL acquisition path is a release tarball, not a Git checkout. The invalid `.git`/Git-SHA check was therefore replaced by a concrete SDL 2.32.8 header-version check.
-
-## Verifier
-
-`scripts/android-jvm/task-02c-verify-packaging.sh` now inspects the actual final JAR and requires the exact nine-class SDL Android glue set.
-
-It also fails when `android/`, `javax/`, or `java/` classes are bundled.
-
-Existing native verification remains in place for:
+The existing Android resources remain:
 
 ```
 arm64-v8a/libarc.so
 arm64-v8a/libsdl-arc.so
 ```
 
-The verifier does not trust source-directory presence as proof.
+### Packaging verifier
 
-## Build / CI evidence
+`scripts/android-jvm/task-02c-verify-packaging.sh` now inspects the actual JAR and requires the exact nine-class SDL Java set.
 
-Continuous Build run 168 reached the Android-JVM dependency stage successfully after:
+It also rejects bundled:
 
-- Arc checkout at the pinned revision
-- Android SDK/NDK verification
-- Android ARM64 SDL native probe
-- deterministic Arc loader overlay
-- patched Arc core rebuild
-- backend-sdl rebuild
+```
+android/*
+javax/*
+java/*
+```
 
-Run 168 then failed during project configuration because the JavaCompile task was registered inside `dist`. That failure was fixed.
+and retains the existing Android ARM64 native/ELF verification.
 
-Continuous Build run 170 then passed the Android-JVM runtime dependency graph stage and failed at the SDL Java compilation task because the Gradle task incorrectly required a Git checkout for a release tarball. That failure was fixed.
+## CI corrections
 
-A new Continuous Build run was triggered for commit `848a9639d6bce8614b1c34f6dfb005fed2ed6975` and was still in progress at report creation.
+### Confirmed by CI/build
 
-Local required Gradle commands were not run because this execution environment has no mounted repository/toolchain. CI is therefore the authoritative reproducible build evidence available in this session.
+The first implementation failed because Gradle 9.3.1 rejected registering a task from inside `desktop:dist`:
 
-## Final JAR inspection
+```
+DefaultTaskContainer#register(String, Class, Action)
+on task set cannot be executed in the current context.
+```
 
-Confirmed by source-level packaging configuration and verifier content:
+The compile task was moved to project configuration and `dist` now consumes its output directory.
 
-- exact nine SDL Android Java classes are specified
-- native Android resources remain part of the Android-JVM path
-- no SDL APK/project is packaged
-- Android Java glue is gated by `-PandroidJvm`
+A subsequent CI run passed the Android-JVM dependency graph.
 
-A completed CI artifact inspection is still required before marking this task complete.
+The next failure was concrete and unrelated to the Java source itself:
 
-## Desktop regression
+```
+Execution failed for task ':desktop:compileAndroidJvmSdlJavaGlue'.
+> SDL source checkout is not a Git checkout:
+  /home/runner/work/Mindustry/SDL2-2.32.8
+```
 
-The Android glue is guarded by `project.hasProperty("androidJvm")` and is outside the normal desktop packaging path.
+The existing SDL native probe extracted SDL from a release tarball, while the production task required Git metadata.
 
-A completed clean desktop artifact inspection is still required to verify that:
+### Fix
 
-`org/libsdl/app/SDLControllerManager.class`
+`.github/workflows/ci.yml` now creates a deterministic sibling SDL checkout before the existing native probe:
 
-and:
+```
+98d1f3a45aae568ccd6ed5fec179330f47d4d356
+```
 
-`arm64-v8a/libsdl-arc.so`
+and verifies the SDL header reports version `2.32.8`.
 
-are absent from the normal desktop JAR.
+## Current CI
 
-## Physical Android result
+Continuous Build:
 
-Not executed in this environment.
+- run: `35608783963`
+- run number: `176`
+- head: `9ddd3c5545e6d631fad33fd7c970bb7881f3e85e`
+- status observed: `in_progress`
 
-The real target remains:
+At the latest observation, the build had passed:
+
+- Android ARM64 SDL native probe;
+- pinned Arc verification;
+- Android JVM Arc loader overlay.
+
+The previous dependency-graph failure was eliminated. The final production packaging result from the current run has not yet been inspected.
+
+## Artifact verification
+
+### Unknown
+
+Still pending from the fixed production run:
+
+- `arm64-v8a/libarc.so` in final JAR;
+- `arm64-v8a/libsdl-arc.so` in final JAR;
+- exact nine SDL Java classes in final JAR;
+- absence of Android SDL glue from the normal desktop JAR;
+- final artifact hashes.
+
+The verifier itself now checks the exact class set against the actual JAR.
+
+## Physical Android runtime
+
+### Unknown
+
+No ADB-connected Xiaomi M2004J19C is available in this engineering environment.
+
+Required target:
 
 - Xiaomi M2004J19C
 - Android API 31
-- arm64
-- Mojo Launcher `justicia-20260910-[7e5e21b]-v3_openjdk`
+- arm64-v8a
+- Mojo `justicia-20260910-[7e5e21b]-v3_openjdk`
+- no property spoofing
 
-No property spoofing or Mojo modifications were used.
+Therefore removal of `SDLControllerManager` from the real-device exception chain has not been claimed.
 
-## Boundary / next blocker
+## Commits
 
-The intended success boundary for this task is removal of:
+Implementation commits:
 
-`NoClassDefFoundError: org/libsdl/app/SDLControllerManager`
+- `051ea9deab4d3ed17b24e8762727bb96aec7aa5f` — package SDL Android Java JNI glue
+- `ebd9e8dc06cf3fbea93595a16a760f7d410334ee` — add exact SDL Java glue verifier
+- `35040d0e1f992935853aea4e79b6d23eb5f199d4` — correct verifier
+- `29edfa8022b5d7e2e7eba0d6f4df60da44370c03` — register Java glue task during project configuration
+- `d9ebb76278788c2a8f076b3093373c14d0daca13` — consume compiled output directory directly
+- `9ddd3c5545e6d631fad33fd7c970bb7881f3e85e` — provision pinned SDL source in CI
 
-No claim is made yet about JNI registration, SDL initialization, EGL/GLES, window creation, or renderer startup.
-
-After the new artifact is built and installed on the physical device, stop at the first new runtime exception and make that exception the next task.
+No rebase, force-push, Arc upgrade, Mojo change, or master change was used.
 
 ## Known limitations
 
-- Physical Android runtime verification is unavailable in the current execution environment.
-- The latest Continuous Build for the current result commit had not completed when this report was created.
-- Final downloaded JAR entry inspection from the latest run is pending.
-
-## Result commits
-
-Implementation/history commits in this task include:
-
-- `051ea9deab4d3ed17b24e8762727bb96aec7aa5f` — package SDL Java glue
-- `ebd9e8dc06cf3fbea93595a16a760f7d410334ee` — add SDL glue verifier
-- `35040d0e1f992935853aea4e79b6d23eb5f199d4` — correct verifier
-- `29edfa8022b5d7e2e7eba0d6f4df60da44370c03` — register Java glue task during configuration
-- `bee78639070a3cf13fb613a32a7a55ac392688fa` — move task registration outside `dist`
-- `d9ebb76278788c2a8f076b3093373c14d0daca13` — consume compiled output directory directly
-- `848a9639d6bce8614b1c34f6dfb005fed2ed6975` — validate SDL source release version
+- Local Gradle execution was unavailable because this environment has no mounted repository/toolchain.
+- Current CI has not yet produced a final fixed-artifact inspection result.
+- Physical Android runtime execution is unavailable here.
 
 ## Next task
 
-Rerun/complete Continuous Build for `848a9639d6bce8614b1c34f6dfb005fed2ed6975`, inspect the produced Android-JVM JAR and clean desktop JAR, then perform the physical Mojo Android ARM64 runtime test and stop at the first new runtime boundary.
+Complete the fixed CI run, inspect the actual Android-JVM and normal desktop JARs, then execute the final Android-JVM JAR on the real device.
+
+The next runtime task must stop at the first new exception after the `SDLControllerManager` boundary.
+
+## Handoff
+
+Status:
+BLOCKED
+
+Branch:
+`android-jvm`
+
+Baseline:
+`707d4d2791c0fe95af01dfae4c1ef54f70d618d0`
+
+Commit:
+`9ddd3c5545e6d631fad33fd7c970bb7881f3e85e` plus this documentation commit
+
+Files changed:
+- `desktop/build.gradle`
+- `scripts/android-jvm/task-02c-verify-packaging.sh`
+- `.github/workflows/ci.yml`
+- `docs/android-jvm/FIX_ANDROID_SDL_JAVA_GLUE.md`
+
+Result:
+The Android SDL Java JNI glue packaging path is implemented and the exact nine-class verifier is in place. CI source provisioning now supplies the pinned SDL 2.32.8 Git checkout required by the production compile task.
+
+CI:
+`35608783963` — in progress at report creation.
+
+Build:
+Android ARM64 SDL native probe and patched Arc rebuild stages passed. Final Android-JVM packaging result is pending.
+
+Verification:
+SDL source closure confirmed; production verifier checks the exact nine-class set; final artifact inspection pending.
+
+Known limitations:
+No physical Android ARM64 runtime is available from this environment.
+
+Next task:
+Inspect the final CI artifact and run the fixed JAR on the real Android ARM64 Mojo runtime; stop at the first new blocker.
