@@ -14,13 +14,13 @@ BLOCKED — deterministic probe implemented and host-validated, but this enginee
 
 ## Baseline
 
-`7ad0c7741ce22ec61ecb1f68f2b5ad57801c1a75`
+`dd06d0caa21be122dbc400ac2c5c9cb2d5f4e0ed`
 
-This is the current remote `android-jvm` HEAD verified before this task.
+This was the current remote `android-jvm` HEAD verified before the implementation commit.
 
 ## Commit
 
-To be filled with the resulting focused commit.
+`1f6c3dd6303ef8992c84d47674d08dc3f4e6a3cb`
 
 ## Objective
 
@@ -332,7 +332,7 @@ Result:
 A deterministic standalone probe now tests nine Android framework classes through the system classloader, context classloader, and bootstrap lookup, while recording focused JVM properties, classloader hierarchy, code source, and resource information. Host validation passed. The physical Android result remains unverified.
 
 CI:
-No workflow configuration was changed. CI execution of the new standalone probe is not a substitute for Android runtime evidence.
+No workflow configuration was changed. The task commit itself was verified as a single fast-forward change from the branch baseline; CI execution of the new standalone probe was not used as a substitute for Android runtime evidence.
 
 Build:
 Host JAR compile/package: PASS. Host runtime sanity check: PASS as a probe-functionality check only, not Android validation.
