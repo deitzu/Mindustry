@@ -77,6 +77,114 @@ tasks.register('dist', Jar){
     }
 }
 
+
+/*
+ * TASK-02D DEBUG-02 TEMPORARY DIAGNOSTIC
+ * No runtime packaging behavior is changed by this block.
+ */
+if(project.hasProperty("androidJvm")){
+    def task02dDebug02Inspect = tasks.register("task02dDebug02InspectArcLoader"){
+        dependsOn ":Arc:arc-core:jar", configurations.runtimeClasspath
+
+        doLast{
+            def loaderPath = "arc/util/SharedLibraryLoader.class"
+            println "== TASK-02D DEBUG-02: runtimeClasspath resolved files =="
+            configurations.runtimeClasspath.files.each{ file ->
+                def contains = false
+                if(file.isDirectory()){
+                    contains = new File(file, loaderPath).isFile()
+                }else if(file.isFile() && file.name.endsWith(".jar")){
+                    new java.util.zip.ZipFile(file).withCloseable{ zip ->
+                        contains = zip.getEntry(loaderPath) != null
+                    }
+                }
+                println("RUNTIME_FILE: " + file.absolutePath + (contains ? " [CONTAINS SharedLibraryLoader.class]" : ""))
+            }
+
+            println "== TASK-02D DEBUG-02: Arc arc-core JARs =="
+            fileTree("../Arc/arc-core/build/libs").matching{ include "arc-core*.jar" }.files.sort().each{ jar ->
+                def contains = false
+                new java.util.zip.ZipFile(jar).withCloseable{ zip ->
+                    contains = zip.getEntry(loaderPath) != null
+                }
+                println("ARC_JAR: " + jar.absolutePath + (contains ? " [CONTAINS SharedLibraryLoader.class]" : ""))
+            }
+
+            def compiled = file("../Arc/arc-core/build/classes/java/main/arc/util/SharedLibraryLoader.class")
+            println("ARC_CLASS_OUTPUT: " + compiled.absolutePath + " exists=" + compiled.isFile() + " bytes=" + (compiled.isFile() ? compiled.length() : -1))
+        }
+    }
+
+    def task02dDebug02OldExclude = tasks.register("task02dDebug02OldExclude", Jar){
+        dependsOn ":Arc:arc-core:jar", configurations.runtimeClasspath
+        def cp = {
+            configurations.runtimeClasspath.collect{ it.isDirectory() ? it : zipTree(it) }
+        }
+        from{ cp() }{
+            exclude("arc/util/SharedLibraryLoader.class")
+        }
+        from("../Arc/arc-core/build/classes/java/main"){
+            include("arc/util/SharedLibraryLoader.class")
+        }
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+        destinationDirectory = layout.buildDirectory.dir("task02d-debug")
+        archiveFileName = "old-exclude.jar"
+        doLast{
+            def out = archiveFile.get().asFile
+            def count = 0
+            new java.util.zip.ZipFile(out).withCloseable{ zip ->
+                count = zip.stream().filter{ it.name == "arc/util/SharedLibraryLoader.class" }.count()
+            }
+            println("OLD_EXCLUDE_RESULT: " + out.absolutePath + " SharedLibraryLoader.class.entries=" + count)
+        }
+    }
+
+    def task02dDebug02OldInclude = tasks.register("task02dDebug02OldInclude", Jar){
+        dependsOn ":Arc:arc-core:jar", configurations.runtimeClasspath
+        def cp = {
+            configurations.runtimeClasspath.collect{ it.isDirectory() ? it : zipTree(it) }
+        }
+        from{ cp() }{
+            exclude("arc/util/SharedLibraryLoader.class")
+        }
+        from("../Arc/arc-core/build/classes/java/main"){
+            include("arc/util/SharedLibraryLoader.class")
+        }
+        duplicatesStrategy = DuplicatesStrategy.INCLUDE
+        destinationDirectory = layout.buildDirectory.dir("task02d-debug")
+        archiveFileName = "old-include.jar"
+        doLast{
+            def out = archiveFile.get().asFile
+            def count = 0
+            new java.util.zip.ZipFile(out).withCloseable{ zip ->
+                count = zip.stream().filter{ it.name == "arc/util/SharedLibraryLoader.class" }.count()
+            }
+            println("OLD_INCLUDE_RESULT: " + out.absolutePath + " SharedLibraryLoader.class.entries=" + count)
+        }
+    }
+
+    task02dDebug02OldExclude.configure{
+        dependsOn task02dDebug02Inspect
+    }
+    task02dDebug02OldInclude.configure{
+        dependsOn task02dDebug02Inspect
+    }
+
+    tasks.named("dist").configure{
+        doFirst{
+            def seen = []
+            source.visit{ details ->
+                if(details.path == "arc/util/SharedLibraryLoader.class"){
+                    seen << details.file.absolutePath
+                }
+            }
+            println("DIST_INPUT_SHARED_LIBRARY_LOADER: count=" + seen.size())
+            seen.each{ println("DIST_INPUT_SHARED_LIBRARY_LOADER_FILE: " + it) }
+        }
+        dependsOn task02dDebug02OldExclude, task02dDebug02OldInclude
+    }
+}
+
 if(!project.ext.hasSprites() && System.getenv("JITPACK") != "true"){
     println "Scheduling sprite packing."
     run.dependsOn ":tools:pack"
