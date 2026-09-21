@@ -400,8 +400,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          test "$(git branch --show-current)" = "android-jvm"
-          echo "Mindustry branch: $(git branch --show-current)"
+          test "$GITHUB_REF_NAME" = "android-jvm"
+          echo "Mindustry ref: $GITHUB_REF_NAME"
           echo "Mindustry HEAD: $(git rev-parse HEAD)"
 
           ARC_REF="$(awk -F= '$1 == "archash" {print $2; exit}' gradle.properties | tr -d '[:space:]')"
