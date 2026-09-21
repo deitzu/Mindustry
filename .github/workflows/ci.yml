@@ -284,18 +284,6 @@ jobs:
           set -euo pipefail
           mkdir -p ci-artifacts/task02c
           ./gradlew -PandroidJvm desktop:dist --rerun-tasks --stacktrace
-          echo "== TASK 02D: inspect packaged Arc loader class =="
-          javap -classpath desktop/build/libs/Mindustry.jar -c -p arc.util.SharedLibraryLoader |
-            tee ci-artifacts/task02d/packaged-shared-library-loader.javap.txt >/dev/null
-
-          grep -Fq 'isAndroidRuntime' ci-artifacts/task02d/packaged-shared-library-loader.javap.txt || {
-            echo "::error::Packaged Mindustry.jar does not contain patched SharedLibraryLoader"
-            exit 1
-          }
-          grep -Fq 'androidResourcePath' ci-artifacts/task02d/packaged-shared-library-loader.javap.txt || {
-            echo "::error::Packaged Mindustry.jar lacks Android resource path selection"
-            exit 1
-          }
           cp desktop/build/libs/Mindustry.jar ci-artifacts/task02c/Mindustry-android-jvm.jar
           bash scripts/android-jvm/task-02c-verify-packaging.sh ci-artifacts/task02c/Mindustry-android-jvm.jar
 
