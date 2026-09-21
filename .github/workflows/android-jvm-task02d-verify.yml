@@ -285,3 +285,5 @@ EOF
           name: TASK-02D-VERIFY-02-packaging-${{ github.sha }}
           path: ci-artifacts/task02d-verify02
           if-no-files-found: error
+
+# TASK-02D VERIFY-02 trigger commit: workflow must execute from a subsequent push.
