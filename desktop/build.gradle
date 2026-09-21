@@ -44,7 +44,30 @@ tasks.register('dist', Jar){
 
     from files(sourceSets.main.output.classesDirs)
     from files(sourceSets.main.output.resourcesDir)
-    from{ configurations.runtimeClasspath.collect{ it.isDirectory() ? it : zipTree(it) } }
+
+    def runtimeClasspathContents = {
+        configurations.runtimeClasspath.collect{ it.isDirectory() ? it : zipTree(it) }
+    }
+
+    if(project.hasProperty("androidJvm")){
+        // The Arc loader is supplied by a deterministic source overlay in ../Arc.
+        // Composite-build dependency resolution can retain a stale arc-core class,
+        // so select the patched loader class explicitly for this artifact only.
+        dependsOn ":Arc:arc-core:classes"
+        from{
+            runtimeClasspathContents()
+        }{
+            exclude("arc/util/SharedLibraryLoader.class")
+        }
+        from("../Arc/arc-core/build/classes/java/main"){
+            include("arc/util/SharedLibraryLoader.class")
+        }
+    }else{
+        from{
+            runtimeClasspathContents()
+        }
+    }
+
     from files(project.assetsDir)
     exclude("config/**")
     exclude("**hs_err**.log")

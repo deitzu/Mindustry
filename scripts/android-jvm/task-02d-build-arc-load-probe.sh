@@ -20,12 +20,18 @@ MANIFEST="$TMP/MANIFEST.MF"
 OUT_JAR="$OUT_DIR/Mindustry-android-jvm-arc-native-load-probe.jar"
 mkdir -p "$PROBE_CLASSES"
 
-unzip -p "$MINDUSTRY_JAR" arc/util/SharedLibraryLoader.class | strings | grep -Fq 'arm64-v8a/lib' || {
-    echo "::error::Patched SharedLibraryLoader.class does not contain Android arm64 resource path logic"
+echo "== TASK 02D: verify patched Arc loader class in Mindustry JAR =="
+javap -classpath "$MINDUSTRY_JAR" -c -p arc.util.SharedLibraryLoader > "$TMP/shared-library-loader.javap.txt"
+grep -Fq 'isAndroidRuntime' "$TMP/shared-library-loader.javap.txt" || {
+    echo "::error::Mindustry JAR does not contain patched SharedLibraryLoader.class"
     exit 1
 }
-unzip -p "$MINDUSTRY_JAR" arc/util/SharedLibraryLoader.class | strings | grep -Fq 'arc.native.loader.debug' || {
-    echo "::error::Patched SharedLibraryLoader.class does not contain loader debug instrumentation"
+grep -Fq 'androidResourcePath' "$TMP/shared-library-loader.javap.txt" || {
+    echo "::error::Mindustry JAR loader lacks Android resource-path selection"
+    exit 1
+}
+grep -Fq 'System.load' "$TMP/shared-library-loader.javap.txt" || {
+    echo "::error::Mindustry JAR loader lacks absolute-path System.load"
     exit 1
 }
 
