@@ -52,20 +52,25 @@ The current branch still contains the historical AndroidJvmLauncher changes from
 
 ## Temporary CI Workflow
 
-**Workflow path:**
+**Primary temporary workflow path:**
 
 `.github/workflows/android-jvm-task02d-verify.yml`
 
+The standalone temporary workflow was committed, but the GitHub Actions connector did not expose a workflow-dispatch action and pushes that introduced/modified the workflow did not produce a run for that new workflow. Therefore the executable verification was also installed as a temporary job in the already-active `.github/workflows/ci.yml`.
+
+**Effective verification job:**
+
+`.github/workflows/ci.yml::task02d-verify`
+
 **Trigger:**
 
-- push to `android-jvm`
-- workflow_dispatch
+push to `android-jvm`
 
 **Purpose:**
 
 Execute the complete TASK-02D packaging evidence chain on an actual Ubuntu GitHub Actions runner.
 
-The workflow will:
+The temporary verification workflow/job will:
 
 1. verify the branch, Arc pin, and production packaging state;
 2. clone Arc into the sibling path used by the project;
