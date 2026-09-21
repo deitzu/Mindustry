@@ -60,6 +60,24 @@ tasks.register('dist', Jar){
 
     if(project.hasProperty("androidJvm")){
         exclude("armeabi-v7a/libarc.so", "x86/libarc.so", "x86_64/libarc.so")
+
+        def androidSdlNativeJar = file("../Arc/backends/backend-sdl/libs/sdl-arc-natives-arm64-v8a.jar")
+        doFirst{
+            if(!androidSdlNativeJar.isFile()){
+                throw new GradleException("Android-JVM SDL native package is missing: " + androidSdlNativeJar)
+            }
+
+            def entries = zipTree(androidSdlNativeJar).matching{ include "libsdl-arc.so" }.files
+            if(entries.size() != 1){
+                throw new GradleException("Android-JVM SDL native package does not contain exactly one libsdl-arc.so: " + androidSdlNativeJar)
+            }
+        }
+
+        into("arm64-v8a"){
+            from{
+                zipTree(androidSdlNativeJar).matching{ include "libsdl-arc.so" }
+            }
+        }
     }
 
     //don't include steam shared libraries unless necessary
