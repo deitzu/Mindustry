@@ -61,7 +61,7 @@ tasks.register('dist', Jar){
     if(project.hasProperty("androidJvm")){
         exclude("armeabi-v7a/libarc.so", "x86/libarc.so", "x86_64/libarc.so")
 
-        def androidSdlNativeJar = file("../Arc/backends/backend-sdl/libs/sdl-arc-natives-arm64-v8a.jar")
+        def androidSdlNativeJar = new File(rootDir.parent, "Arc/backends/backend-sdl/libs/sdl-arc-natives-arm64-v8a.jar")
         doFirst{
             if(!androidSdlNativeJar.isFile()){
                 throw new GradleException("Android-JVM SDL native package is missing: " + androidSdlNativeJar)
