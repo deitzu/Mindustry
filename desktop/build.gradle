@@ -39,12 +39,13 @@ tasks.register('run', JavaExec){
 }
 
 def androidSdlJavaGlueTask = null
+def androidSdlJavaOutput = null
 def androidSdlGlueClasses = []
 
 if(project.hasProperty("androidJvm")){
     def androidSdlRoot = new File(rootDir.parent, "SDL2-2.32.8")
     def androidSdlJavaRoot = new File(androidSdlRoot, "android-project/app/src/main/java")
-    def androidSdlJavaOutput = file("$buildDir/generated/android-jvm/sdl-java-glue/classes")
+    androidSdlJavaOutput = file("$buildDir/generated/android-jvm/sdl-java-glue/classes")
     def androidSdkRoot = System.getenv("ANDROID_SDK_ROOT") ?: System.getenv("ANDROID_HOME")
     def androidApiLevel = System.getenv("ANDROID_API_LEVEL") ?: "36"
     def androidJar = androidSdkRoot == null ? null : new File(androidSdkRoot, "platforms/android-$androidApiLevel/android.jar")
@@ -128,7 +129,7 @@ tasks.register('dist', Jar){
 
     if(androidSdlJavaGlueTask != null){
         dependsOn androidSdlJavaGlueTask
-        from(androidSdlJavaGlueTask){
+        from(androidSdlJavaOutput){
             androidSdlGlueClasses.each{ include it }
         }
 
