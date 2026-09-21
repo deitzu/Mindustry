@@ -38,6 +38,32 @@ tasks.register('run', JavaExec){
     }
 }
 
+tasks.register('runAndroidJvm', JavaExec){
+    dependsOn classes
+    mainClass = "mindustry.androidjvm.AndroidJvmLauncher"
+    classpath = sourceSets.main.runtimeClasspath
+    standardInput = System.in
+    workingDir = project.assetsDir
+    ignoreExitValue = true
+
+    // Force Android detection in Arc
+    jvmArgs("-Darc.android=true")
+
+    jvmArgs += "-XX:+ShowCodeDetailsInExceptionMessages"
+
+    if(project.hasProperty("args")){
+        args Eval.me(project.getProperties()["args"])
+    }
+
+    if(project.hasProperty("jvmArgs")){
+        jvmArgs((List<String>) Eval.me(project.getProperties()["jvmArgs"]))
+    }
+
+    if(project.hasProperty("dataDir")){
+        environment("MINDUSTRY_DATA_DIR", project.getProperties()["dataDir"])
+    }
+}
+
 tasks.register('dist', Jar){
     dependsOn configurations.runtimeClasspath
     dependsOn ":desktop:processResources"
@@ -209,5 +235,73 @@ platforms.each{ platform ->
 
         finalizedBy "zip${platform.toString()}"
 
+    }
+}
+
+// Android JVM distribution task - creates a JAR for running on Android via JVM (Mojo/MJ Launcher)
+tasks.register('androidJvmDist', Jar){
+    dependsOn configurations.runtimeClasspath
+    dependsOn ":desktop:processResources"
+
+    // Use Android JVM launcher as main class
+    def mainClassName = "mindustry.androidjvm.AndroidJvmLauncher"
+
+    from files(sourceSets.main.output.classesDirs)
+    from files(sourceSets.main.output.resourcesDir)
+    
+    // Include all runtime dependencies EXCEPT desktop natives
+    from{ 
+        configurations.runtimeClasspath.collect{ it.isDirectory() ? it : zipTree(it) } 
+    }
+    from files(project.assetsDir)
+    
+    // Exclude desktop native libraries (Linux, Windows, Mac)
+    exclude("**/libarc*.so")
+    exclude("**/libarc*.dylib")
+    exclude("**/arc*.dll")
+    exclude("**/libsdl-arc*.so")
+    exclude("**/libsdl-arc*.dylib")
+    exclude("**/sdl-arc*.dll")
+    exclude("**/libarc-freetype*.so")
+    exclude("**/libarc-freetype*.dylib")
+    exclude("**/arc-freetype*.dll")
+    exclude("**/libfrogworks*.so")
+    exclude("**/libfrogworks*.dylib")
+    exclude("**/frogworks*.dll")
+    exclude("**/libsteam*.so")
+    exclude("**/libsteam*.dylib")
+    exclude("**/steam*.dll")
+    exclude("**hs_err**.log")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    archiveFileName = "${appName}-android-jvm.jar"
+
+    manifest{
+        attributes 'Main-Class': mainClassName
+        attributes 'Enable-Native-Access': 'ALL-UNNAMED'
+        attributes 'Multi-Release': 'true'
+    }
+    
+    doLast{
+        // Copy Android natives (arm64-v8a) into the JAR if localArc is available
+        if(localArc){
+            def androidNativesDir = new File(rootDir.parent, "Arc/natives/natives-android/libs/arm64-v8a")
+            def freetypeNativesDir = new File(rootDir.parent, "Arc/natives/natives-freetype-android/libs/arm64-v8a")
+            
+            if(androidNativesDir.exists()){
+                copy{
+                    from androidNativesDir
+                    into "arm64-v8a"
+                    include "*.so"
+                }
+            }
+            if(freetypeNativesDir.exists()){
+                copy{
+                    from freetypeNativesDir
+                    into "arm64-v8a"
+                    include "*.so"
+                }
+            }
+        }
     }
 }
