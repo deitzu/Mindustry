@@ -1,14 +1,21 @@
 package mindustry.androidjvm;
 
 import arc.*;
+import arc.Files.*;
+import arc.struct.*;
 import arc.backend.sdl.*;
 import arc.files.*;
 import arc.util.*;
+import arc.util.Log.*;
 import mindustry.*;
 import mindustry.core.*;
 import mindustry.game.EventType.*;
+import mindustry.gen.*;
 import mindustry.net.*;
+import mindustry.mod.Mods.*;
+import mindustry.type.*;
 import mindustry.ui.*;
+import mindustry.ui.dialogs.*;
 import mindustry.ui.FileChooser.*;
 
 import java.io.*;
