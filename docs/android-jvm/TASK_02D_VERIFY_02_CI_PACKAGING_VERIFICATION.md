@@ -56,11 +56,11 @@ The current branch still contains the historical AndroidJvmLauncher changes from
 
 `.github/workflows/android-jvm-task02d-verify.yml`
 
-The standalone temporary workflow was committed, but the GitHub Actions connector did not expose a workflow-dispatch action and pushes that introduced/modified the workflow did not produce a run for that new workflow. Therefore the executable verification was also installed as a temporary job in the already-active `.github/workflows/ci.yml`.
+The standalone temporary workflow was committed, but its push trigger did not produce an executable run through the available GitHub Actions interface. The verifier was subsequently installed as a temporary job in the repository's active `.github/workflows/push.yml` workflow.
 
 **Effective verification job:**
 
-`.github/workflows/ci.yml::task02d-verify`
+`.github/workflows/push.yml::task02d-verify`
 
 **Trigger:**
 
@@ -202,7 +202,7 @@ This regression build is executed after Android-JVM packaging verification so it
 
 **Pending.**
 
-The repository push workflow now contains a temporary `task02d-verify` job. This commit is intentionally documentation-only so the existing `push` workflow executes that newly-added job.
+The repository push workflow now contains a temporary `task02d-verify` job. The current commit is documentation-only and exists to trigger that already-registered job.
 
 No PASS conclusion is permitted before successful GitHub Actions execution and direct artifact inspection.
 
