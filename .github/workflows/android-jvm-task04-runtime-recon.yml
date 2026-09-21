@@ -1,0 +1,238 @@
+name: TASK-04 Android JVM Runtime Recon
+
+on:
+  push:
+    branches:
+      - android-jvm
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-recon:
+    name: TASK-04 runtime reconnaissance
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout current android-jvm
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: wrapper
+
+      - name: Prepare CI evidence directory
+        shell: bash
+        run: |
+          set -u
+          mkdir -p ci-artifacts/task04
+          {
+            echo "WORKFLOW_RUN=${GITHUB_RUN_ID}"
+            echo "COMMIT=$(git rev-parse HEAD)"
+            echo "BRANCH=$(git branch --show-current)"
+            echo "BASELINE=64ea7aeecb9f740ab08d7fd7a98583638464e8c6"
+            echo "ARC_PIN=8eb00ffff0126d0576c67df46f99b8f6bccd96fe"
+            echo "SDL_VERSION=2.32.8"
+            echo "SDL_COMMIT=98d1f3a45aae568ccd6ed5fec179330f47d4d356"
+          } | tee ci-artifacts/task04/build-context.txt
+
+      - name: Source state audit
+        shell: bash
+        run: |
+          set -u
+          {
+            echo "== main class selection =="
+            grep -n 'mainClassName' desktop/build.gradle || true
+            echo
+            echo "== AndroidJvmLauncher imports =="
+            sed -n '1,24p' core/src/mindustry/androidjvm/AndroidJvmLauncher.java
+            echo
+            echo "== desktop dependencies =="
+            sed -n '258,279p' build.gradle
+            echo
+            echo "== core dependencies =="
+            sed -n '378,394p' build.gradle
+            echo
+            echo "== desktop dist packaging =="
+            sed -n '40,72p' desktop/build.gradle
+            echo
+            echo "== forbidden/diagnostic source references =="
+            grep -RInE 'SharedLibraryLoader|System\.load|System\.loadLibrary|SDL_Init|GLES|EGL|libarc\.so|libsdl-arc\.so' \
+              core/src/mindustry/androidjvm desktop/src scripts/android-jvm ci/android-jvm 2>/dev/null || true
+          } | tee ci-artifacts/task04/source-state.txt
+
+      - name: Clone and pin Arc
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected='8eb00ffff0126d0576c67df46f99b8f6bccd96fe'
+          git clone --no-checkout --filter=blob:none --depth=1 https://github.com/Anuken/Arc ../Arc
+          git -C ../Arc fetch --no-tags --depth=1 origin "${expected}"
+          git -C ../Arc checkout --detach "${expected}"
+          actual="$(git -C ../Arc rev-parse HEAD)"
+          [ "${actual}" = "${expected}" ]
+          echo "Arc revision=${actual}" | tee ci-artifacts/task04/arc-revision.txt
+
+      - name: Apply deterministic Arc loader overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          patch='ci/android-jvm/task02d-arc-shared-library-loader.patch'
+          git -C ../Arc apply --check "$GITHUB_WORKSPACE/${patch}"
+          git -C ../Arc apply "$GITHUB_WORKSPACE/${patch}"
+          git -C ../Arc diff --check
+          git -C ../Arc status --short | tee ci-artifacts/task04/arc-overlay-status.txt
+
+      - name: Inspect Gradle compile classpaths
+        shell: bash
+        run: |
+          set -u
+          ./gradlew -PandroidJvm :core:dependencies --configuration compileClasspath --console=plain \
+            > ci-artifacts/task04/core-compileClasspath.txt 2>&1
+          core_rc=$?
+          ./gradlew -PandroidJvm :desktop:dependencies --configuration compileClasspath --console=plain \
+            > ci-artifacts/task04/desktop-compileClasspath.txt 2>&1
+          desktop_rc=$?
+
+          {
+            echo "CORE_DEPENDENCIES_RC=${core_rc}"
+            if grep -q 'backend-sdl' ci-artifacts/task04/core-compileClasspath.txt; then
+              echo 'CORE_COMPILE_BACKEND_SDL=PRESENT'
+            else
+              echo 'CORE_COMPILE_BACKEND_SDL=ABSENT'
+            fi
+            if grep -q 'backend-sdl' ci-artifacts/task04/desktop-compileClasspath.txt; then
+              echo 'DESKTOP_COMPILE_BACKEND_SDL=PRESENT'
+            else
+              echo 'DESKTOP_COMPILE_BACKEND_SDL=ABSENT'
+            fi
+          } | tee ci-artifacts/task04/compile-classpath-summary.txt
+
+      - name: Build current Android-JVM Mindustry JAR
+        id: mindustry_build
+        shell: bash
+        run: |
+          set +e
+          ./gradlew -PandroidJvm desktop:dist --rerun-tasks --stacktrace --console=plain \
+            2>&1 | tee ci-artifacts/task04/current-mindustry-build.log
+          rc=${PIPESTATUS[0]}
+          echo "exit_code=${rc}" > ci-artifacts/task04/current-mindustry-build.status
+          echo "BUILD_RC=${rc}" | tee ci-artifacts/task04/current-mindustry-build-result.txt
+
+          if [ -f desktop/build/libs/Mindustry.jar ]; then
+            echo "MINDUSTRY_JAR_PRESENT=YES" | tee -a ci-artifacts/task04/current-mindustry-build-result.txt
+          else
+            echo "MINDUSTRY_JAR_PRESENT=NO" | tee -a ci-artifacts/task04/current-mindustry-build-result.txt
+          fi
+
+          exit 0
+
+      - name: Audit generated JAR and native resources
+        if: always()
+        shell: bash
+        run: |
+          set -u
+          out=ci-artifacts/task04/jar-audit
+          mkdir -p "$out"
+
+          if [ ! -f desktop/build/libs/Mindustry.jar ]; then
+            echo "CURRENT_JAR=ABSENT" | tee "$out/summary.txt"
+            exit 0
+          fi
+
+          jar_file="$PWD/desktop/build/libs/Mindustry.jar"
+          echo "CURRENT_JAR=$jar_file" | tee "$out/summary.txt"
+          sha256sum "$jar_file" | tee "$out/mindustry-jar-sha256.txt"
+          jar tf "$jar_file" | tee "$out/jar-entries.txt"
+
+          {
+            echo "MAIN_CLASS:"
+            unzip -p "$jar_file" META-INF/MANIFEST.MF 2>/dev/null | tr -d '\r' | grep '^Main-Class:' || true
+            echo "ANDROID_JVM_LAUNCHER:"
+            jar tf "$jar_file" | grep -Fx 'mindustry/androidjvm/AndroidJvmLauncher.class' || true
+            echo "SHARED_LIBRARY_LOADER:"
+            jar tf "$jar_file" | grep -Fx 'arc/util/SharedLibraryLoader.class' || true
+            echo "ARM64_ARC_NATIVE:"
+            jar tf "$jar_file" | grep -Fx 'arm64-v8a/libarc.so' || true
+            echo "SDL_NATIVE_ENTRIES:"
+            jar tf "$jar_file" | grep -E '(^|/)libsdl-arc\.so$|(^|/)sdl-arc-natives|(^|/)libSDL2.*\.so$' || true
+          } | tee "$out/required-entries.txt"
+
+          mkdir -p "$out/extracted"
+          while IFS= read -r entry; do
+            [ -n "$entry" ] || continue
+            case "$entry" in
+              *.so)
+                safe="${entry//\//_}"
+                unzip -p "$jar_file" "$entry" > "$out/extracted/$safe"
+                ;;
+            esac
+          done < <(jar tf "$jar_file" | grep '\.so$' || true)
+
+          {
+            echo "== ELF inventory =="
+            find "$out/extracted" -type f -name '*.so' -print | sort
+            echo
+            for so in "$out"/extracted/*.so; do
+              [ -f "$so" ] || continue
+              echo "===== $so ====="
+              readelf -h "$so" 2>&1 || true
+              readelf -d "$so" 2>&1 || true
+              echo "-- JNI symbols --"
+              readelf -Ws "$so" 2>/dev/null | grep -E 'Java_|JNI_OnLoad|JNI_OnUnload' | head -200 || true
+            done
+          } | tee "$out/elf-audit.txt"
+
+      - name: Runtime startup-chain audit
+        if: always()
+        shell: bash
+        run: |
+          set -u
+          {
+            echo "Expected target: Android JVM -> Mindustry.jar -> Android-compatible Arc/native -> backend-sdl -> Android GLES"
+            echo
+            echo "Stage: Main-Class"
+            unzip -p desktop/build/libs/Mindustry.jar META-INF/MANIFEST.MF 2>/dev/null | tr -d '\r' | grep '^Main-Class:' || echo 'UNAVAILABLE'
+            echo
+            echo "Stage: AndroidJvmLauncher source"
+            grep -nE 'new SdlApplication|new SdlConfig|super\.|ClientLauncher|handleCrash' core/src/mindustry/androidjvm/AndroidJvmLauncher.java || true
+            echo
+            echo "Stage: native loader"
+            grep -nE 'isAndroidRuntime|androidResourcePath|System\.load|System\.loadLibrary' ci/android-jvm/task02d-arc-shared-library-loader.patch || true
+            echo
+            echo "Stage: SDL native init"
+            grep -RInE 'SDL_Init|JNI_OnLoad|SDLControllerManager|SDLActivity|GLES' scripts/android-jvm core/src desktop/src 2>/dev/null | head -300 || true
+            echo
+            echo "Stage: filesystem/assets/input/audio"
+            grep -RInE 'FileChooser|assets|input|audio|SDL_Audio|SDLAudioManager' core/src/mindustry/androidjvm scripts/android-jvm 2>/dev/null | head -300 || true
+          } | tee ci-artifacts/task04/runtime-startup-chain.txt
+
+      - name: Upload TASK-04 reconnaissance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Mindustry-Android-JVM-TASK-04-Recon-${{ github.sha }}
+          path: ci-artifacts/task04
+          if-no-files-found: error
+
+      - name: Enforce current build result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          rc="$(cut -d= -f2 ci-artifacts/task04/current-mindustry-build.status)"
+          if [ "$rc" != "0" ]; then
+            echo "::error::Current Android-JVM Mindustry build failed with exit code $rc"
+            exit "$rc"
+          fi
+          echo "Current Android-JVM Mindustry build completed successfully."
