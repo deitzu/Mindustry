@@ -80,21 +80,24 @@ if(project.hasProperty("androidJvm")){
             if(!androidSdlRoot.isDirectory()){
                 throw new GradleException("SDL source checkout is missing: " + androidSdlRoot)
             }
-            if(!new File(androidSdlRoot, ".git").exists()){
-                throw new GradleException("SDL source checkout is not a Git checkout: " + androidSdlRoot)
-            }
             if(androidSdkRoot == null || !androidJar.isFile()){
                 throw new GradleException("Android API " + androidApiLevel + " android.jar is missing; set ANDROID_SDK_ROOT or ANDROID_HOME")
             }
 
-            def sdlCommitProcess = ["git", "-C", androidSdlRoot.absolutePath, "rev-parse", "HEAD"].execute()
-            sdlCommitProcess.waitFor()
-            if(sdlCommitProcess.exitValue() != 0){
-                throw new GradleException("Unable to resolve SDL Git revision: " + androidSdlRoot)
+            def sdlVersionHeader = new File(androidSdlRoot, "include/SDL_version.h")
+            if(!sdlVersionHeader.isFile()){
+                throw new GradleException("SDL version header is missing: " + sdlVersionHeader)
             }
-            def sdlCommit = sdlCommitProcess.text.trim()
-            if(sdlCommit != "98d1f3a45aae568ccd6ed5fec179330f47d4d356"){
-                throw new GradleException("Unexpected SDL revision: expected 98d1f3a45aae568ccd6ed5fec179330f47d4d356, got " + sdlCommit)
+            def sdlVersionText = sdlVersionHeader.text
+            def sdlMajorMatch = (sdlVersionText =~ /(?m)^#define SDL_MAJOR_VERSION\\s+(\\d+)/)
+            def sdlMinorMatch = (sdlVersionText =~ /(?m)^#define SDL_MINOR_VERSION\\s+(\\d+)/)
+            def sdlPatchMatch = (sdlVersionText =~ /(?m)^#define SDL_PATCHLEVEL\\s+(\\d+)/)
+            if(!sdlMajorMatch.find() || !sdlMinorMatch.find() || !sdlPatchMatch.find()){
+                throw new GradleException("SDL version macros are missing from: " + sdlVersionHeader)
+            }
+            def sdlVersion = sdlMajorMatch.group(1) + "." + sdlMinorMatch.group(1) + "." + sdlPatchMatch.group(1)
+            if(sdlVersion != "2.32.8"){
+                throw new GradleException("Unexpected SDL version: expected 2.32.8, got " + sdlVersion)
             }
 
             androidSdlGlueSources.each{ sourcePath ->
