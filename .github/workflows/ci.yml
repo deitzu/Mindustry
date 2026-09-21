@@ -263,6 +263,12 @@ jobs:
 
           echo "Patched Arc SharedLibraryLoader.class verified in composite-build output"
 
+      - name: Refresh backend-sdl jar with patched Arc loader
+        shell: bash
+        run: |
+          set -euo pipefail
+          ( cd ../Arc && ./gradlew :backends:backend-sdl:preJni :backends:backend-sdl:jar --rerun-tasks --stacktrace --console=plain )
+
       - name: Inspect Android-JVM runtime dependency graph
         shell: bash
         run: |
