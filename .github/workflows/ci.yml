@@ -58,29 +58,6 @@ jobs:
             exit 1
           fi
 
-      - name: Apply Android JVM Arc native loader overlay
-        shell: bash
-        run: |
-          set -euo pipefail
-          ARC_DIR="$GITHUB_WORKSPACE/../Arc"
-          PATCH_FILE="$GITHUB_WORKSPACE/ci/android-jvm/task02d-arc-shared-library-loader.patch"
-          EXPECTED_ARC_SHA="8eb00ffff0126d0576c67df46f99b8f6bccd96fe"
-
-          test -f "$PATCH_FILE"
-          actual_arc_sha="$(git -C "$ARC_DIR" rev-parse HEAD)"
-          [ "$actual_arc_sha" = "$EXPECTED_ARC_SHA" ] || {
-            echo "::error::Arc SHA mismatch before loader overlay: $actual_arc_sha"
-            exit 1
-          }
-
-          git -C "$ARC_DIR" apply --check "$PATCH_FILE"
-          git -C "$ARC_DIR" apply "$PATCH_FILE"
-          git -C "$ARC_DIR" diff --check
-
-          test "$(git -C "$ARC_DIR" diff --name-only)" = "arc-core/src/arc/util/SharedLibraryLoader.java"
-          echo "Applied deterministic Android JVM Arc loader overlay"
-          echo "Arc SHA remains $actual_arc_sha"
-
       - name: Setup Android SDK
         uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
         with:
@@ -238,6 +215,30 @@ jobs:
           name: Android-SDL-native-probe-${{ github.sha }}
           path: ci-artifacts/task03c
           if-no-files-found: error
+
+      - name: Apply Android JVM Arc native loader overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARC_DIR="$GITHUB_WORKSPACE/../Arc"
+          PATCH_FILE="$GITHUB_WORKSPACE/ci/android-jvm/task02d-arc-shared-library-loader.patch"
+          EXPECTED_ARC_SHA="8eb00ffff0126d0576c67df46f99b8f6bccd96fe"
+
+          test -f "$PATCH_FILE"
+          actual_arc_sha="$(git -C "$ARC_DIR" rev-parse HEAD)"
+          [ "$actual_arc_sha" = "$EXPECTED_ARC_SHA" ] || {
+            echo "::error::Arc SHA mismatch before loader overlay: $actual_arc_sha"
+            exit 1
+          }
+
+          git -C "$ARC_DIR" diff --check
+          git -C "$ARC_DIR" apply --check "$PATCH_FILE"
+          git -C "$ARC_DIR" apply "$PATCH_FILE"
+          git -C "$ARC_DIR" diff --check
+
+          git -C "$ARC_DIR" diff --name-only | grep -Fxq 'arc-core/src/arc/util/SharedLibraryLoader.java'
+          echo "Applied deterministic Android JVM Arc loader overlay"
+          echo "Arc SHA remains $actual_arc_sha"
 
       - name: Inspect Android-JVM runtime dependency graph
         shell: bash
