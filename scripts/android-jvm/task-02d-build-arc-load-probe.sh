@@ -183,13 +183,63 @@ jar ufm "$OUT_JAR" "$MANIFEST"
 jar uf "$OUT_JAR" -C "$PROBE_CLASSES" androidjvm/probe/AndroidJvmArcNativeLoadProbe.class
 
 echo "== TASK 02D: verify Android JVM Arc native load probe package =="
-jar tf "$OUT_JAR" | grep -Fxq 'arc/util/SharedLibraryLoader.class'
-jar tf "$OUT_JAR" | grep -Fxq 'androidjvm/probe/AndroidJvmArcNativeLoadProbe.class'
-jar tf "$OUT_JAR" | grep -Fxq 'arm64-v8a/libarc.so'
-unzip -p "$OUT_JAR" 'arm64-v8a/libarc.so' | sha256sum | grep -Fxq "$EXPECTED_ARC_SHA256  -"
-unzip -p "$OUT_JAR" 'META-INF/MANIFEST.MF' | tr -d '\\r' | grep -Fxq 'Main-Class: androidjvm.probe.AndroidJvmArcNativeLoadProbe'
+
+verify_entry(){
+    local label="$1"
+    local entry="$2"
+    echo "CHECK: $label"
+    if jar tf "$OUT_JAR" | grep -Fxq "$entry"; then
+        echo "PASS: $label"
+    else
+        echo "::error::FAIL: $label (missing $entry)"
+        return 1
+    fi
+}
+
+verify_hash(){
+    local label="$1"
+    local entry="$2"
+    local expected="$3"
+    local actual
+    echo "CHECK: $label"
+    actual="$(unzip -p "$OUT_JAR" "$entry" | sha256sum | awk '{print $1}')"
+    echo "SHA256: $entry = $actual"
+    if [ "$actual" = "$expected" ]; then
+        echo "PASS: $label"
+    else
+        echo "::error::FAIL: $label (expected $expected, got $actual)"
+        return 1
+    fi
+}
+
+verify_manifest_main_class(){
+    local raw_file="$TMP/probe-manifest.raw.txt"
+    local normalized_file="$TMP/probe-manifest.normalized.txt"
+
+    echo "CHECK: probe JAR Main-Class manifest"
+    unzip -p "$OUT_JAR" 'META-INF/MANIFEST.MF' | tee "$raw_file" | sed -n 'l'
+    tr_output="$(unzip -p "$OUT_JAR" 'META-INF/MANIFEST.MF' | tr -d '\\r')"
+    printf '%s\n' "$tr_output" > "$normalized_file"
+    echo "Manifest after current tr expression:"
+    sed -n 'l' "$normalized_file"
+    if grep -Fxq 'Main-Class: androidjvm.probe.AndroidJvmArcNativeLoadProbe' "$normalized_file"; then
+        echo "PASS: probe JAR Main-Class manifest"
+    else
+        echo "::error::FAIL: probe JAR Main-Class manifest"
+        return 1
+    fi
+}
+
+verify_entry "arc/util/SharedLibraryLoader.class" 'arc/util/SharedLibraryLoader.class'
+verify_entry "androidjvm/probe/AndroidJvmArcNativeLoadProbe.class" 'androidjvm/probe/AndroidJvmArcNativeLoadProbe.class'
+verify_entry "arm64-v8a/libarc.so" 'arm64-v8a/libarc.so'
+verify_hash "packaged libarc.so SHA256" 'arm64-v8a/libarc.so' "$EXPECTED_ARC_SHA256"
+verify_manifest_main_class
+
+echo "CHECK: final probe JAR SHA256 / entry listing"
 sha256sum "$OUT_JAR" | tee "$OUT_DIR/probe-jar-sha256.txt"
 jar tf "$OUT_JAR" | grep -E '^(arc/util/SharedLibraryLoader.class|androidjvm/probe/AndroidJvmArcNativeLoadProbe.class|arm64-v8a/libarc.so)$' | sort | tee "$OUT_DIR/probe-entries.txt"
+echo "PASS: final probe JAR SHA256 / entry listing"
 
 cat > "$OUT_DIR/README-MOJO.txt" <<'TXT'
 TASK 02D — Android JVM Arc native load probe
