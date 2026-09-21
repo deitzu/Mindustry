@@ -27,6 +27,7 @@ import static mindustry.Vars.*;
 public class AndroidJvmLauncher extends ClientLauncher{
     public static void main(String[] arg){
         try{
+            Core.files = new SdlFiles();
             Version.init();
             Vars.loadLogger();
             Vars.loadFileLogger(new Fi(OS.getAppDataDirectoryString(appName)).child("last_log.txt"));
