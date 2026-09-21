@@ -339,6 +339,13 @@ jobs:
 
           ./gradlew -PandroidJvm :desktop:dist --rerun-tasks --stacktrace --console=plain --init-script ci-artifacts/task04-debug01/runtime-classpath-init.gradle | tee ci-artifacts/task04-debug01/desktop-dist-debug.log
           test -s ci-artifacts/task04-debug01/desktop-dist-debug.log
+
+          echo "== DEBUG-01 final Mindustry.jar loader =="
+          jar tf desktop/build/libs/Mindustry.jar | grep -Fxq 'arc/util/SharedLibraryLoader.class'
+          unzip -p desktop/build/libs/Mindustry.jar arc/util/SharedLibraryLoader.class | sha256sum | tee ci-artifacts/task04-debug01/final-loader-sha256.txt
+          javap -classpath desktop/build/libs/Mindustry.jar -c -p arc.util.SharedLibraryLoader |
+            tee ci-artifacts/task04-debug01/final-loader-javap.txt >/dev/null
+          grep -E 'isAndroidRuntime|androidResourcePath|System\.load' ci-artifacts/task04-debug01/final-loader-javap.txt || true
       - name: Package Android-JVM Arc native artifact
         shell: bash
         run: |
