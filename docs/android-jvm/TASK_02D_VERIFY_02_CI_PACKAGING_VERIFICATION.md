@@ -202,6 +202,8 @@ This regression build is executed after Android-JVM packaging verification so it
 
 **Pending.**
 
+The active PR workflow now contains a temporary `task02d-verify` job. This commit is intentionally documentation-only so the existing `pull_request` workflow executes that newly-added job.
+
 No PASS conclusion is permitted before successful GitHub Actions execution and direct artifact inspection.
 
 ## Known Limitations
