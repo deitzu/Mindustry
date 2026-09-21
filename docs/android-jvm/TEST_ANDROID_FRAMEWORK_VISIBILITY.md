@@ -322,7 +322,7 @@ Baseline:
 `7ad0c7741ce22ec61ecb1f68f2b5ad57801c1a75`
 
 Commit:
-To be filled with the resulting focused commit.
+`1f6c3dd6303ef8992c84d47674d08dc3f4e6a3cb`
 
 Files changed:
 - `scripts/android-jvm/android-framework-visibility-probe.sh`
