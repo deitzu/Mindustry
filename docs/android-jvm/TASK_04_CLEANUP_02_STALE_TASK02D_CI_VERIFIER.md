@@ -2,9 +2,11 @@
 
 ## Status
 
-**IN PROGRESS**
+**BLOCKED BY FIRST NEW FAILURE**
 
-The obsolete TASK-02D VERIFY-02 packaged `SharedLibraryLoader` bytecode verification was removed from `.github/workflows/ci.yml`. Continuous Build is required to verify the complete workflow before closure.
+The obsolete TASK-02D VERIFY-02 packaged `SharedLibraryLoader` bytecode verifier was successfully removed from `.github/workflows/ci.yml`.
+
+Continuous Build then passed the previous failure point and exposed the next genuine failure in the existing Android-JVM Arc native load probe. Per the task stop condition, no unrelated fix was attempted.
 
 ## Branch
 
@@ -14,104 +16,177 @@ The obsolete TASK-02D VERIFY-02 packaged `SharedLibraryLoader` bytecode verifica
 
 `8c4c1bc9df2660e3ec848de64c2f378296c4c070`
 
+## Implementation Commit
+
+`ec873c1f1e61d8181c000b1f8d278c1dca82900a`
+
+Message:
+
+`chore(android-jvm): retire stale TASK-02D CI verifier`
+
+## Report Commit
+
+`991f19b9bedd74fcc854e8a236d88c411cec1207`
+
 ## Arc Revision
 
 `8eb00ffff0126d0576c67df46f99b8f6bccd96fe`
 
-## Objective
+Confirmed by the Continuous Build checkout. The pinned Arc revision was unchanged.
 
-Retire only the remaining obsolete TASK-02D VERIFY-02 packaging verifier from `.github/workflows/ci.yml`.
+## Exact Stale Verifier Removed
 
-## Investigation
-
-The current workflow was inspected before modification.
-
-The obsolete verifier was identified inside:
+The obsolete block was inside the existing step:
 
 `Package Android-JVM Arc native artifact`
 
-The stale logic consisted of:
+Removed:
 
-- the `TASK 02D: inspect packaged Arc loader class` diagnostic banner;
-- `javap` against `arc.util.SharedLibraryLoader` from `desktop/build/libs/Mindustry.jar`;
-- the generated `packaged-shared-library-loader.javap.txt` diagnostic output;
-- the `isAndroidRuntime` and `androidResourcePath` grep checks that failed the Continuous Build.
+- `TASK 02D: inspect packaged Arc loader class` diagnostic output;
+- `javap -classpath desktop/build/libs/Mindustry.jar -c -p arc.util.SharedLibraryLoader`;
+- output file `ci-artifacts/task02d/packaged-shared-library-loader.javap.txt`;
+- the `isAndroidRuntime` packaged-bytecode check;
+- the `androidResourcePath` packaged-bytecode check;
+- the associated failure messages for those checks.
 
-The following adjacent Android-JVM steps were retained because they are still valid build/probe work:
+Retained in the same step:
+
+- Android-JVM `desktop:dist`;
+- `Mindustry-android-jvm.jar` packaging copy;
+- `scripts/android-jvm/task-02c-verify-packaging.sh`.
+
+## Valid Android-JVM Probes Preserved
+
+The workflow still contains the existing valid probe/build stages, including:
 
 - Android ARM64 SDL native probe;
-- Android JVM Arc loader overlay;
-- rebuilding patched Arc core;
+- deterministic Arc loader overlay;
+- patched Arc core rebuild;
 - Android-JVM runtime dependency inspection;
-- Android-JVM packaging verification script;
-- Android JVM Arc native load probe package;
+- Android-JVM Arc native load probe package;
 - real Android JVM native load probe;
 - Android absolute-path native load diagnostic;
 - SDL Android controller Java glue diagnostic;
 - Android JVM native loader boundary probe.
 
+The obsolete packaged-bytecode verifier markers are absent from the current `ci.yml`.
+
+## Scope Verification
+
+The implementation commit changes only:
+
+`.github/workflows/ci.yml`
+
+with **0 additions / 12 deletions**.
+
 No production source file was modified.
 
-## Implementation
+The following were not modified:
 
-Removed only the stale packaged-loader verification commands from the `Package Android-JVM Arc native artifact` step.
+- `AndroidJvmLauncher`
+- `SharedLibraryLoader.java`
+- Arc overlay patch
+- Arc revision
+- `desktop/build.gradle`
+- `build.gradle`
+- `SDLGL.java`
+- backend-sdl source
+- GLES/native source
+- native linker configuration
+- Android APK backend
+- launcher behavior
 
-The step still:
+## Continuous Build
 
-1. builds the Android-JVM JAR with `./gradlew -PandroidJvm desktop:dist --rerun-tasks --stacktrace`;
-2. copies the JAR to the existing Android-JVM packaging artifact location;
-3. runs `scripts/android-jvm/task-02c-verify-packaging.sh`.
+Workflow:
 
-No CI redesign was performed.
+`.github/workflows/ci.yml`
 
-## Files Changed
+Workflow name:
 
-- `.github/workflows/ci.yml`
-- `docs/android-jvm/TASK_04_CLEANUP_02_STALE_TASK02D_CI_VERIFIER.md`
+`Continuous Build`
 
-The implementation commit changes only `.github/workflows/ci.yml`, with 12 deletions and no additions.
+Run:
 
-## Acceptance Criteria
+`35585254909`
 
-1. No stale TASK-02D VERIFY-02 packaging verifier remains in `ci.yml`.
-2. Valid Android-JVM native probes remain.
-3. `:core:compileJava` passes.
-4. `:desktop:compileJava` passes.
-5. Android-JVM `desktop:dist` passes.
-6. Normal `desktop:dist` passes.
-7. Android-JVM JAR manifest contains `Main-Class: mindustry.androidjvm.AndroidJvmLauncher`.
-8. Normal desktop JAR manifest contains `Main-Class: mindustry.desktop.DesktopLauncher`.
-9. Arc remains pinned to `8eb00ffff0126d0576c67df46f99b8f6bccd96fe`.
-10. No unrelated production-source modifications.
+Main job:
 
-## CI
+`106286981227` — `Test and build`
 
-**PENDING**
+Parallel native probe job:
 
-Continuous Build must be evaluated on the final resulting commit.
+`106286981080` — `Arc Android ARM64 native probe`
 
-## Build
+### Result
 
-**PENDING**
+- Arc Android ARM64 native probe: **PASS**
+- Main `Test and build`: **FAIL**
+- Previous stale TASK-02D verifier: **removed and no longer the failure point**
+- First new failure: `Build Android JVM Arc native load probe package`
 
-The previous TASK-04-CLEANUP-01 run established that the Android-JVM `desktop:dist` itself succeeds before the stale CI-side verifier fails. This task must confirm that the later workflow stages now complete.
+Exact failing command:
 
-## Verification
+`bash scripts/android-jvm/task-02d-build-arc-load-probe.sh desktop/build/libs/Mindustry.jar`
 
-Source verification before CI:
+Exact failure:
 
-- stale packaged `SharedLibraryLoader` bytecode checks are absent from the modified `ci.yml` section;
-- the Android-JVM native probe steps remain present;
-- the Arc overlay and pinned revision logic remain present.
+`Mindustry JAR does not contain patched SharedLibraryLoader.class`
 
-Artifact and manifest verification: **PENDING CI**.
+The job exited with code 1 immediately after this failure.
+
+## Build Results
+
+The Continuous Build progressed through the following successfully before the stop condition:
+
+- Arc checkout at the required pinned revision;
+- Android toolchain installation and verification;
+- Android ARM64 SDL native probe;
+- Arc loader overlay application;
+- patched Arc core rebuild;
+- Android-JVM runtime dependency inspection;
+- Android-JVM `desktop:dist`.
+
+The Android-JVM `desktop:dist` invocation completed successfully before the first new failure.
+
+The stale verifier failure from TASK-04-CLEANUP-01 no longer occurs.
+
+## Acceptance Matrix
+
+| Acceptance | Result | Evidence |
+|---|---|---|
+| No stale TASK-02D VERIFY-02 packaging verifier remains in `ci.yml` | **PASS** | Source inspection: old diagnostic, packaged `javap`, output, and grep checks absent |
+| Valid Android-JVM native probes remain | **PASS** | Existing probe steps remain in `ci.yml` |
+| `:core:compileJava` passes | **PASS** | Completed successfully in Continuous Build before failure |
+| `:desktop:compileJava` passes | **PASS** | Completed successfully in Continuous Build before failure |
+| `./gradlew -PandroidJvm desktop:dist --rerun-tasks` passes | **PASS** | Completed successfully before first new failure |
+| Normal `./gradlew desktop:dist --rerun-tasks` passes | **NOT REACHED** | Workflow stopped at first new failure |
+| Android-JVM JAR Main-Class = `mindustry.androidjvm.AndroidJvmLauncher` | **NOT FRESHLY VERIFIED** | Workflow stopped before a fresh manifest check |
+| Normal desktop JAR Main-Class = `mindustry.desktop.DesktopLauncher` | **NOT REACHED** | Workflow stopped before normal desktop packaging |
+| Arc SHA = `8eb00ffff0126d0576c67df46f99b8f6bccd96fe` | **PASS** | CI cloned/checked out exact pinned revision |
+| No unrelated production-source modifications | **PASS** | Implementation commit contains only `.github/workflows/ci.yml` |
+
+## Result
+
+**Cleanup objective: PASS. Full acceptance: BLOCKED.**
+
+The obsolete CI-side TASK-02D VERIFY-02 packaged-loader verifier has been retired without changing valid Android-JVM probes or production code.
+
+The next failure is a different existing probe:
+
+`task-02d-build-arc-load-probe.sh`
+
+It reports that the produced Mindustry JAR does not contain the patched Arc `SharedLibraryLoader.class`.
+
+This is the first genuine post-cleanup failure, so the task stops here as required.
 
 ## Known Limitations
 
-No Android runtime execution is part of this cleanup task.
-
-If Continuous Build exposes a new genuine failure after the obsolete verifier is removed, that failure will be recorded as the first new blocker and no unrelated fix will be attempted in this task.
+- Full Continuous Build is not green.
+- Normal desktop packaging and both final JAR manifest checks were not reached.
+- No Android runtime execution was performed.
+- The new failure requires a separate focused investigation; it was not modified as part of this cleanup task.
 
 ## Next Task
 
-After a successful full Continuous Build, use the verified Android-JVM JAR for the real Android runtime reconnaissance path. Otherwise, create a focused debug task for the first genuine new failure.
+**TASK-04-DEBUG-01 — Investigate why the Android-JVM JAR produced by `desktop:dist` does not contain the patched Arc `SharedLibraryLoader.class`, starting from the actual dependency/package inputs.**
