@@ -1,0 +1,510 @@
+name: Continuous Build
+
+on:
+  push:
+  workflow_dispatch:
+#re trigger the ci
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Test and build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout triggering commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: wrapper
+
+      - name: Build Android-JVM framework visibility probe
+        shell: bash
+        run: bash scripts/android-jvm/android-framework-visibility-probe.sh
+
+      - name: Upload Android-JVM framework visibility probe
+        uses: actions/upload-artifact@v7
+        with:
+          name: Android-JVM-framework-visibility-probe-${{ github.sha }}
+          path: ci-artifacts/android-jvm-framework-visibility-probe
+          if-no-files-found: error
+
+      - name: Clone and pin Arc
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          arc_ref="$(awk -F= '$1 == "archash" {print $2; exit}' gradle.properties | tr -d '[:space:]')"
+          if [ -z "$arc_ref" ]; then
+            echo "::error::archash is missing from gradle.properties"
+            exit 1
+          fi
+
+          arc_sha="$(curl -fsSL --retry 3 --retry-all-errors             -H 'Accept: application/vnd.github+json'             -H 'X-GitHub-Api-Version: 2022-11-28'             "https://api.github.com/repos/Anuken/Arc/commits/${arc_ref}" |
+            python3 -c 'import json, sys; print(json.load(sys.stdin)["sha"])')"
+
+          if ! printf '%s' "$arc_sha" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::Could not resolve archash='$arc_ref' to a full Arc commit SHA"
+            exit 1
+          fi
+
+          git clone --no-checkout --filter=blob:none --depth=1 https://github.com/Anuken/Arc ../Arc
+          git -C ../Arc fetch --no-tags --depth=1 origin "$arc_sha"
+          git -C ../Arc checkout --detach "$arc_sha"
+
+          actual_sha="$(git -C ../Arc rev-parse HEAD)"
+          if [ "$actual_sha" != "$arc_sha" ]; then
+            echo "::error::Arc checkout mismatch: expected $arc_sha, got $actual_sha"
+            exit 1
+          fi
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        with:
+          packages: ''
+
+      - name: Install Android native toolchain
+        shell: bash
+        env:
+          ANDROID_NDK_VERSION: '30.0.16248370'
+          ANDROID_API_LEVEL: '36'
+          ANDROID_BUILD_TOOLS_VERSION: '36.0.0'
+          ANDROID_CMAKE_VERSION: '3.31.6'
+        run: |
+          set -euo pipefail
+
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          if [ -z "$sdk_root" ]; then
+            echo "::error::Android SDK setup failed: neither ANDROID_SDK_ROOT nor ANDROID_HOME is set"
+            exit 1
+          fi
+          if [ ! -d "$sdk_root" ]; then
+            echo "::error::Android SDK setup failed: SDK directory does not exist: $sdk_root"
+            exit 1
+          fi
+
+          sdkmanager --sdk_root="$sdk_root" --install             "platforms;android-${ANDROID_API_LEVEL}"             "build-tools;${ANDROID_BUILD_TOOLS_VERSION}"             "ndk;${ANDROID_NDK_VERSION}"             "cmake;${ANDROID_CMAKE_VERSION}"
+
+          ndk_dir="$sdk_root/ndk/${ANDROID_NDK_VERSION}"
+          if [ ! -d "$ndk_dir" ]; then
+            echo "::error::Android NDK installation failed: expected directory does not exist: $ndk_dir"
+            exit 1
+          fi
+
+          echo "ANDROID_SDK_ROOT=$sdk_root" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$sdk_root" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ndk_dir" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ndk_dir" >> "$GITHUB_ENV"
+          echo "NDK_HOME=$ndk_dir" >> "$GITHUB_ENV"
+          echo "$ndk_dir" >> "$GITHUB_PATH"
+          echo "ANDROID_NDK_VERSION=${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Verify Android native toolchain
+        shell: bash
+        env:
+          ANDROID_NDK_VERSION: '30.0.16248370'
+          ANDROID_API_LEVEL: '36'
+          ANDROID_BUILD_TOOLS_VERSION: '36.0.0'
+          ANDROID_CMAKE_VERSION: '3.31.6'
+        run: |
+          set -euo pipefail
+
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          if [ -z "$sdk_root" ] || [ ! -d "$sdk_root" ]; then
+            echo "::error::Android SDK verification failed: SDK path is missing or invalid"
+            exit 1
+          fi
+
+          ndk_dir="${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-$sdk_root/ndk/${ANDROID_NDK_VERSION}}}"
+          if [ ! -d "$ndk_dir" ]; then
+            echo "::error::Android NDK verification failed: NDK directory is missing: $ndk_dir"
+            exit 1
+          fi
+
+          source_properties="$ndk_dir/source.properties"
+          if [ ! -f "$source_properties" ]; then
+            echo "::error::Android NDK verification failed: source.properties is missing"
+            exit 1
+          fi
+
+          ndk_revision="$(sed -n 's/^Pkg.Revision = //p' "$source_properties" | tr -d '[:space:]')"
+          if [ "$ndk_revision" != "$ANDROID_NDK_VERSION" ]; then
+            echo "::error::Android NDK version mismatch: expected $ANDROID_NDK_VERSION, got ${ndk_revision:-unknown}"
+            exit 1
+          fi
+
+          toolchain_root="$ndk_dir/toolchains/llvm/prebuilt/linux-x86_64"
+          compiler="$toolchain_root/bin/clang++"
+          if [ ! -x "$compiler" ]; then
+            echo "::error::Android AArch64 compiler verification failed: NDK clang++ not found at $compiler"
+            exit 1
+          fi
+
+          target="aarch64-linux-android21"
+          compiler_target="$("$compiler" --target="$target" -dumpmachine 2>/dev/null)"
+          if ! printf '%s' "$compiler_target" | grep -Eq '^aarch64.*linux-android'; then
+            echo "::error::Android AArch64 compiler verification failed: unexpected target '$compiler_target'"
+            exit 1
+          fi
+
+          sysroot="$toolchain_root/sysroot"
+          arm64_libs="$sysroot/usr/lib/aarch64-linux-android/21"
+          arm64_headers="$sysroot/usr/include"
+          if [ ! -d "$arm64_headers" ]; then
+            echo "::error::Android NDK headers verification failed: missing sysroot headers at $arm64_headers"
+            exit 1
+          fi
+          if [ ! -d "$arm64_libs" ]; then
+            echo "::error::Android arm64-v8a libraries verification failed: missing target sysroot at $arm64_libs"
+            exit 1
+          fi
+
+          ndk_build="$ndk_dir/ndk-build"
+          if [ ! -x "$ndk_build" ]; then
+            echo "::error::Android native build tooling verification failed: ndk-build is missing at $ndk_build"
+            exit 1
+          fi
+
+          cmake_bin="$sdk_root/cmake/${ANDROID_CMAKE_VERSION}/bin/cmake"
+          if [ ! -x "$cmake_bin" ]; then
+            echo "::error::Android native build tooling verification failed: CMake ${ANDROID_CMAKE_VERSION} is missing at $cmake_bin"
+            exit 1
+          fi
+
+          platform_dir="$sdk_root/platforms/android-${ANDROID_API_LEVEL}"
+          if [ ! -d "$platform_dir" ]; then
+            echo "::error::Android SDK verification failed: platform android-${ANDROID_API_LEVEL} is missing"
+            exit 1
+          fi
+
+          build_tools_dir="$sdk_root/build-tools/${ANDROID_BUILD_TOOLS_VERSION}"
+          if [ ! -d "$build_tools_dir" ]; then
+            echo "::error::Android SDK verification failed: build-tools ${ANDROID_BUILD_TOOLS_VERSION} is missing"
+            exit 1
+          fi
+
+          echo "Android SDK: $sdk_root"
+          echo "Android NDK: $ndk_dir"
+          echo "NDK version: $ndk_revision"
+          echo "AArch64 compiler: $compiler"
+          echo "Compiler target: $compiler_target"
+          echo "Android target triple: $target"
+          echo "arm64-v8a sysroot libraries: $arm64_libs"
+          echo "Android headers: $arm64_headers"
+          echo "ndk-build: $ndk_build"
+          resolved_ndk_build="$(command -v ndk-build || true)"
+          if [ "$resolved_ndk_build" != "$ndk_build" ]; then
+            echo "::error::ndk-build PATH verification failed: expected $ndk_build, got ${resolved_ndk_build:-<missing>}"
+            exit 1
+          fi
+          if [ "${NDK_HOME:-}" != "$ndk_dir" ]; then
+            echo "::error::NDK_HOME verification failed: expected $ndk_dir, got ${NDK_HOME:-<unset>}"
+            exit 1
+          fi
+          echo "NDK_HOME: $NDK_HOME"
+          echo "ndk-build on PATH: $resolved_ndk_build"
+          echo "CMake: $cmake_bin"
+
+      - name: Checkout pinned SDL 2.32.8 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDL_DIR="$GITHUB_WORKSPACE/../SDL2-2.32.8"
+          SDL_COMMIT="98d1f3a45aae568ccd6ed5fec179330f47d4d356"
+          rm -rf "$SDL_DIR"
+          git clone --no-tags --filter=blob:none --depth=1 https://github.com/libsdl-org/SDL "$SDL_DIR"
+          git -C "$SDL_DIR" fetch --no-tags --depth=1 origin "$SDL_COMMIT"
+          git -C "$SDL_DIR" checkout --detach "$SDL_COMMIT"
+          actual_sdl="$(git -C "$SDL_DIR" rev-parse HEAD)"
+          [ "$actual_sdl" = "$SDL_COMMIT" ] || {
+            echo "::error::SDL checkout mismatch: expected $SDL_COMMIT, got $actual_sdl"
+            exit 1
+          }
+          header_version="$(awk '/^#define SDL_MAJOR_VERSION[[:space:]]/ {major=$3} /^#define SDL_MINOR_VERSION[[:space:]]/ {minor=$3} /^#define SDL_PATCHLEVEL[[:space:]]/ {patch=$3} END {if(major == "" || minor == "" || patch == "") exit 1; print major "." minor "." patch}' "$SDL_DIR/include/SDL_version.h")"
+          [ "$header_version" = "2.32.8" ] || {
+            echo "::error::SDL source version mismatch: expected 2.32.8, got $header_version"
+            exit 1
+          }
+          echo "SDL revision: $actual_sdl"
+          echo "SDL version: $header_version"
+
+      - name: Run Android ARM64 SDL native probe
+        shell: bash
+        run: bash scripts/android-jvm/task-03c-probe.sh
+
+      - name: Upload Android ARM64 SDL native probe
+        uses: actions/upload-artifact@v7
+        with:
+          name: Android-SDL-native-probe-${{ github.sha }}
+          path: ci-artifacts/task03c
+          if-no-files-found: error
+
+      - name: Apply Android JVM Arc native loader overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARC_DIR="$GITHUB_WORKSPACE/../Arc"
+          PATCH_FILE="$GITHUB_WORKSPACE/ci/android-jvm/task02d-arc-shared-library-loader.patch"
+          EXPECTED_ARC_SHA="8eb00ffff0126d0576c67df46f99b8f6bccd96fe"
+
+          test -f "$PATCH_FILE"
+          actual_arc_sha="$(git -C "$ARC_DIR" rev-parse HEAD)"
+          [ "$actual_arc_sha" = "$EXPECTED_ARC_SHA" ] || {
+            echo "::error::Arc SHA mismatch before loader overlay: $actual_arc_sha"
+            exit 1
+          }
+
+          git -C "$ARC_DIR" diff --check
+          git -C "$ARC_DIR" apply --check "$PATCH_FILE"
+          git -C "$ARC_DIR" apply "$PATCH_FILE"
+          git -C "$ARC_DIR" diff --check
+
+          git -C "$ARC_DIR" diff --name-only | grep -Fxq 'arc-core/src/arc/util/SharedLibraryLoader.java'
+          echo "Applied deterministic Android JVM Arc loader overlay"
+          echo "Arc SHA remains $actual_arc_sha"
+
+      - name: Rebuild patched Arc core for Android JVM packaging
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci-artifacts/task02d
+          ./gradlew :Arc:arc-core:classes --rerun-tasks --stacktrace --console=plain
+
+          LOADER_CLASSES="$GITHUB_WORKSPACE/../Arc/arc-core/build/classes/java/main"
+          LOADER_CLASS="$LOADER_CLASSES/arc/util/SharedLibraryLoader.class"
+          test -f "$LOADER_CLASS" || {
+            echo "::error::Patched Arc SharedLibraryLoader.class was not produced: $LOADER_CLASS"
+            exit 1
+          }
+
+          javap -classpath "$LOADER_CLASSES" -c -p arc.util.SharedLibraryLoader |
+            tee ci-artifacts/task02d/arc-loader-javap.txt >/dev/null
+
+          grep -Fq 'isAndroidRuntime' ci-artifacts/task02d/arc-loader-javap.txt
+          grep -Fq 'androidResourcePath' ci-artifacts/task02d/arc-loader-javap.txt
+          grep -Fq 'System.load' ci-artifacts/task02d/arc-loader-javap.txt
+
+          echo "Patched Arc SharedLibraryLoader.class verified in composite-build output"
+
+      - name: Refresh backend-sdl jar with patched Arc loader
+        shell: bash
+        run: |
+          set -euo pipefail
+          ( cd ../Arc && ./gradlew :backends:backend-sdl:preJni :backends:backend-sdl:jar --rerun-tasks --stacktrace --console=plain )
+
+      - name: Inspect Android-JVM runtime dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci-artifacts/task02c
+          ./gradlew -PandroidJvm :desktop:dependencies --configuration runtimeClasspath --console=plain | tee ci-artifacts/task02c/android-jvm-runtimeClasspath.txt
+          grep -q 'natives-android' ci-artifacts/task02c/android-jvm-runtimeClasspath.txt || {
+            echo "::error::Android-JVM runtimeClasspath did not resolve natives-android"
+            exit 1
+          }
+          if grep -q 'natives-desktop' ci-artifacts/task02c/android-jvm-runtimeClasspath.txt; then
+            echo "::error::Android-JVM runtimeClasspath still resolves natives-desktop"
+            exit 1
+          fi
+
+      - name: Package Android-JVM Arc native artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci-artifacts/task02c
+          ./gradlew -PandroidJvm desktop:dist --rerun-tasks --stacktrace
+          cp desktop/build/libs/Mindustry.jar ci-artifacts/task02c/Mindustry-android-jvm.jar
+          bash scripts/android-jvm/task-02c-verify-packaging.sh ci-artifacts/task02c/Mindustry-android-jvm.jar
+
+      - name: Upload Android-JVM packaging proof
+        uses: actions/upload-artifact@v7
+        with:
+          name: Mindustry-Android-JVM-packaging-${{ github.sha }}
+          path: ci-artifacts/task02c
+          if-no-files-found: error
+
+      - name: Build Android JVM Arc native load probe package
+        shell: bash
+        run: bash scripts/android-jvm/task-02d-build-arc-load-probe.sh desktop/build/libs/Mindustry.jar
+
+      - name: Upload Android JVM Arc native load probe
+        uses: actions/upload-artifact@v7
+        with:
+          name: Mindustry-Android-JVM-Arc-load-probe-${{ github.sha }}
+          path: ci-artifacts/task02d
+          if-no-files-found: error
+
+      - name: Run unit tests
+        run: ./gradlew tests:test --stacktrace
+
+      - name: Build desktop JAR
+        run: ./gradlew desktop:dist
+
+      - name: Verify desktop JAR
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f desktop/build/libs/Mindustry.jar
+          echo "Verified desktop/build/libs/Mindustry.jar"
+
+      - name: Package real Android JVM native load probe
+        shell: bash
+        run: bash scripts/android-jvm/task-03c-build-real-android-load-probe.sh desktop/build/libs/Mindustry.jar ci-artifacts/task03c/libsdl-arc.so
+
+      - name: Build Android absolute-path native load diagnostic
+        shell: bash
+        run: bash scripts/android-jvm/task-03c-build-absolute-load-probe.sh ci-artifacts/task03c/libsdl-arc.so
+
+      - name: Upload Android absolute-path native load diagnostic
+        uses: actions/upload-artifact@v7
+        with:
+          name: Android-JVM-absolute-load-probe-${{ github.sha }}
+          path: ci-artifacts/android-jvm-absolute-load-probe
+          if-no-files-found: error
+
+      - name: Build SDL Android controller Java glue diagnostic
+        shell: bash
+        run: bash scripts/android-jvm/task-03c-build-controller-glue-load-probe.sh ci-artifacts/task03c/libsdl-arc.so
+
+      - name: Upload SDL Android controller Java glue diagnostic
+        uses: actions/upload-artifact@v7
+        with:
+          name: Android-JVM-android-jni-glue-load-probe-${{ github.sha }}
+          path: ci-artifacts/android-jvm-android-jni-glue-load-probe
+          if-no-files-found: error
+
+      - name: Probe Android JVM native loader boundary
+        shell: bash
+        run: bash scripts/android-jvm/task-03c-runtime-loader-probe.sh desktop/build/libs/Mindustry.jar
+
+      - name: Upload Android JVM native load probe
+        uses: actions/upload-artifact@v7
+        with:
+          name: Android-JVM-native-load-probe-${{ github.sha }}
+          path: ci-artifacts/android-jvm-load-probe
+          if-no-files-found: error
+
+      - name: Upload desktop JAR
+        uses: actions/upload-artifact@v7
+        with:
+          name: Mindustry-${{ github.sha }}
+          path: desktop/build/libs/Mindustry.jar
+
+  arc-android-native:
+    name: Arc Android ARM64 native probe
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout triggering commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: wrapper
+
+      - name: Clone and pin Arc
+        shell: bash
+        run: |
+          set -euo pipefail
+          arc_ref="$(awk -F= '$1 == "archash" {print $2; exit}' gradle.properties | tr -d '[:space:]')"
+          [ -n "$arc_ref" ] || { echo "::error::archash is missing"; exit 1; }
+          arc_sha="$(curl -fsSL --retry 3 --retry-all-errors             -H 'Accept: application/vnd.github+json'             -H 'X-GitHub-Api-Version: 2022-11-28'             "https://api.github.com/repos/Anuken/Arc/commits/${arc_ref}" |
+            python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')"
+          [ "$arc_sha" = "8eb00ffff0126d0576c67df46f99b8f6bccd96fe" ] || {
+            echo "::error::Unexpected Arc SHA: $arc_sha"
+            exit 1
+          }
+          git clone --no-checkout --filter=blob:none --depth=1 https://github.com/Anuken/Arc ../Arc
+          git -C ../Arc fetch --no-tags --depth=1 origin "$arc_sha"
+          git -C ../Arc checkout --detach "$arc_sha"
+          actual="$(git -C ../Arc rev-parse HEAD)"
+          [ "$actual" = "8eb00ffff0126d0576c67df46f99b8f6bccd96fe" ] || {
+            echo "::error::Arc checkout mismatch: $actual"
+            exit 1
+          }
+          echo "Arc revision: $actual"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        with:
+          packages: ''
+
+      - name: Install Android native toolchain
+        shell: bash
+        env:
+          ANDROID_NDK_VERSION: '30.0.16248370'
+          ANDROID_API_LEVEL: '36'
+          ANDROID_BUILD_TOOLS_VERSION: '36.0.0'
+          ANDROID_CMAKE_VERSION: '3.31.6'
+        run: |
+          set -euo pipefail
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          [ -n "$sdk_root" ] || { echo "::error::Android SDK root missing"; exit 1; }
+          sdkmanager --sdk_root="$sdk_root" --install             "platforms;android-${ANDROID_API_LEVEL}"             "build-tools;${ANDROID_BUILD_TOOLS_VERSION}"             "ndk;${ANDROID_NDK_VERSION}"             "cmake;${ANDROID_CMAKE_VERSION}"
+          ndk_dir="$sdk_root/ndk/${ANDROID_NDK_VERSION}"
+          [ -d "$ndk_dir" ] || { echo "::error::NDK missing: $ndk_dir"; exit 1; }
+          {
+            echo "ANDROID_SDK_ROOT=$sdk_root"
+            echo "ANDROID_HOME=$sdk_root"
+            echo "ANDROID_NDK_HOME=$ndk_dir"
+            echo "ANDROID_NDK_ROOT=$ndk_dir"
+            echo "NDK_HOME=$ndk_dir"
+            echo "ANDROID_NDK_VERSION=${ANDROID_NDK_VERSION}"
+          } >> "$GITHUB_ENV"
+          echo "$ndk_dir" >> "$GITHUB_PATH"
+
+      - name: Verify Android native toolchain
+        shell: bash
+        env:
+          ANDROID_NDK_VERSION: '30.0.16248370'
+          ANDROID_API_LEVEL: '36'
+        run: |
+          set -euo pipefail
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          ndk_dir="${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-$sdk_root/ndk/${ANDROID_NDK_VERSION}}}"
+          revision="$(sed -n 's/^Pkg.Revision = //p' "$ndk_dir/source.properties" | tr -d '[:space:]')"
+          [ "$revision" = "${ANDROID_NDK_VERSION}" ] || { echo "::error::NDK version mismatch"; exit 1; }
+          compiler="$ndk_dir/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++"
+          target="$("$compiler" --target=aarch64-linux-android21 -dumpmachine)"
+          echo "Android SDK: $sdk_root"
+          echo "Android NDK: $ndk_dir"
+          echo "NDK version: $revision"
+          echo "AArch64 compiler: $compiler"
+          echo "Compiler target: $target"
+          printf '%s' "$target" | grep -Eq '^aarch64.*linux-android' || {
+            echo "::error::Unexpected compiler target: $target"
+            exit 1
+          }
+
+      - name: Run Arc Android ARM64 libarc probe
+        shell: bash
+        run: bash scripts/android-jvm/task-02b-build-arc-android.sh
+
+      - name: Upload Arc Android ARM64 libarc probe
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Arc-Android-libarc-probe-${{ github.sha }}
+          path: ci-artifacts/task02b
+          if-no-files-found: warn
+

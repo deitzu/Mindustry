@@ -1,0 +1,72 @@
+diff --git a/arc-core/src/arc/util/SharedLibraryLoader.java b/arc-core/src/arc/util/SharedLibraryLoader.java
+--- a/arc-core/src/arc/util/SharedLibraryLoader.java
++++ b/arc-core/src/arc/util/SharedLibraryLoader.java
+@@ -71,23 +71,51 @@
+         // in case of iOS, things have been linked statically to the executable, bail out.
+         if(isIos) return;
+ 
+-        synchronized(SharedLibraryLoader.class){
+-            if(isLoaded(libraryName)) return;
+-            String platformName = mapLibraryName(libraryName);
+-            try{
+-                if(isAndroid)
+-                    System.loadLibrary(platformName);
+-                else
+-                    loadFile(platformName);
+-                setLoaded(libraryName);
+-            }catch(Throwable ex){
+-                throw new ArcRuntimeException("Couldn't load shared library '" + platformName + "' for target: "
+-                + osName + (is64Bit ? ", 64-bit" : ", 32-bit"), ex);
+-            }
+-        }
+-    }
+-
+-    protected InputStream readFile(String path){
++        synchronized(SharedLibraryLoader.class){
++            if(isLoaded(libraryName)) return;
++            String platformName = mapLibraryName(libraryName);
++            try{
++                if(isAndroidRuntime()){
++                    String resourcePath = androidResourcePath(libraryName);
++                    if(Boolean.getBoolean("arc.native.loader.debug")){
++                        System.out.println("Arc Android native resource = " + resourcePath);
++                    }
++                    File extracted = extractFile(resourcePath, null);
++                    if(Boolean.getBoolean("arc.native.loader.debug")){
++                        System.out.println("Arc Android native extracted = " + extracted.getAbsolutePath());
++                        System.out.println("Arc Android native exists = " + extracted.exists());
++                        System.out.println("Arc Android native executable = " + canExecute(extracted));
++                    }
++                    System.load(extracted.getAbsolutePath());
++                }
++                else
++                    loadFile(platformName);
++                setLoaded(libraryName);
++            }catch(Throwable ex){
++                throw new ArcRuntimeException("Couldn't load shared library '" + platformName + "' for target: "
++                + osName + (is64Bit ? ", 64-bit" : ", 32-bit"), ex);
++            }
++        }
++    }
++
++    /** Detects Android JVMs whose runtime/vendor strings do not match the legacy OS.java checks. */
++    private boolean isAndroidRuntime(){
++        if(isAndroid) return true;
++        return propNoNull("java.runtime.name").toLowerCase(Locale.ROOT).contains("android")
++            || propNoNull("java.vm.vendor").toLowerCase(Locale.ROOT).contains("android")
++            || propNoNull("java.vendor").toLowerCase(Locale.ROOT).contains("android");
++    }
++
++    /** Returns the Android JVM resource path for the project's supported ARM64 ABI. */
++    private String androidResourcePath(String libraryName){
++        String arch = propNoNull("os.arch").toLowerCase(Locale.ROOT);
++        if(!arch.equals("aarch64") && !arch.equals("arm64") && !arch.equals("arm64-v8a")){
++            throw new ArcRuntimeException("Unsupported Android JVM native architecture: " + propNoNull("os.arch"));
++        }
++        return "arm64-v8a/lib" + libraryName + ".so";
++    }
++
++    protected InputStream readFile(String path){
+         if(nativesJar == null){
+             InputStream input = SharedLibraryLoader.class.getResourceAsStream("/" + path);
+             if(input == null) throw new ArcRuntimeException("Unable to read file for extraction: " + path);

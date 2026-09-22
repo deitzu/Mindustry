@@ -1,0 +1,363 @@
+diff --git a/arc-core/src/arc/util/OS.java b/arc-core/src/arc/util/OS.java
+--- a/arc-core/src/arc/util/OS.java
++++ b/arc-core/src/arc/util/OS.java
+@@ -39,8 +39,7 @@
+     static{
+-        if(propNoNull("java.runtime.name").contains("Android Runtime") || propNoNull("java.vm.vendor").contains("The Android Project") || propNoNull("java.vendor").contains("The Android Project")){
++        if(propNoNull("java.runtime.name").contains("Android") || propNoNull("java.vm.vendor").contains("The Android Project") || propNoNull("java.vendor").contains("The Android Project")){
+             isAndroid = true;
+             isWindows = false;
+             isLinux = false;
+             isMac = false;
+-            is64Bit = false;
+         }
+ 
+diff --git a/backends/backend-sdl/build.gradle b/backends/backend-sdl/build.gradle
+--- a/backends/backend-sdl/build.gradle
++++ b/backends/backend-sdl/build.gradle
+@@ -88,6 +88,10 @@
+     def mainRoot = "build/jnigen/sources"
+ 
+     all{
++    }
++
++    // GLEW is required by the existing desktop OpenGL targets only.
++    each({ it.os != Android }){
+         cIncludes = ["$mainRoot/glew-2.2.0/src/glew.c"]
+         headerDirs = ["$mainRoot/glew-2.2.0/include"]
+     }
+@@ -99,6 +103,31 @@
+         linkerFlags = "-shared -m64".split(" ")
+     }
+ 
++    def androidSdlRoot = System.getenv("SDL2_ANDROID_ROOT")
++
++    if(androidSdlRoot != null && !androidSdlRoot.isBlank()){
++        addAndroid(ABI_ARM64_V8A){
++            def sdlBuild = new File(androidSdlRoot, "build").absolutePath
++            headerDirs += (String[])[
++                new File(androidSdlRoot, "include/SDL2").absolutePath,
++                new File(sdlBuild, "include/SDL2").absolutePath,
++                new File(sdlBuild, "include").absolutePath,
++                new File(sdlBuild, "include-config-release/SDL2").absolutePath
++            ]
++
++            libraries += (String[])[
++                "-L${sdlBuild}",
++                "-lSDL2",
++                "-llog",
++                "-landroid",
++                "-ldl",
++                "-lGLESv3",
++                "-lGLESv1_CM"
++            ]
++
++            androidApplicationMk += ["APP_STL := c++_static"]
++        }
++    }
+     addWindows(x64, x86){
+         def path = "SDL2-$sdlVersion/x86_64-w64-mingw32"
+         def root = "$rootDir/backends/backend-sdl/build/jnigen/sources"
+diff --git a/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java b/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java
+--- a/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java
++++ b/backends/backend-sdl/src/arc/backend/sdl/jni/SDLGL.java
+@@ -9,9 +9,14 @@
+ 
+     /*JNI
+ 
++    #ifdef __ANDROID__
++    #include <GLES3/gl3.h>
++    #include <GLES2/gl2ext.h>
++    #else
+     #define GLEW_STATIC
+ 
+     #include "GL/glew.h"
++    #endif
+ 
+     //copied from ios openGL source, I have no idea what I'm doing
+ 
+@@ -101,6 +106,11 @@
+     public static native String init(); /*
+         nativeClassInit(env);
+ 
++        #ifdef __ANDROID__
++        return NULL;
++        #else
++        nativeClassInit(env);
++
+         GLenum glewError = glewInit();
+         if(glewError != GLEW_OK){
+             return env->NewStringUTF((const char*)glewGetErrorString(glewError));
+@@ -112,6 +122,7 @@
+         }else{
+             return env->NewStringUTF("Missing framebuffer_object extension.");
+         }
++        #endif
+     */
+ 
+     //endregion
+@@ -298,21 +309,29 @@
+     */
+ 
+     public static native void glBindFramebuffer(int target, int framebuffer); /*
++        #ifdef __ANDROID__
++        glBindFramebuffer(target, framebuffer);
++        #else
+         if(glBindFramebuffer){
+             glBindFramebuffer(target, framebuffer);
+             return;
+         }
+ 
+         glBindFramebufferEXT(target, framebuffer);
++        #endif
+     */
+ 
+     public static native void glBindRenderbuffer(int target, int renderbuffer); /*
++        #ifdef __ANDROID__
++        glBindRenderbuffer(target, renderbuffer);
++        #else
+         if(glBindRenderbuffer){
+             glBindRenderbuffer(target, renderbuffer);
+             return;
+         }
+ 
+         glBindRenderbufferEXT(target, renderbuffer);
++        #endif
+     */
+ 
+     public static native void glBlendColor(float red, float green, float blue, float alpha); /*
+@@ -340,11 +359,15 @@
+     */
+ 
+     public static native int glCheckFramebufferStatus(int target); /*
++        #ifdef __ANDROID__
++        return glCheckFramebufferStatus(target);
++        #else
+         if(glCheckFramebufferStatus){
+             return glCheckFramebufferStatus(target);
+         }
+ 
+         return glCheckFramebufferStatusEXT(target);
++        #endif
+     */
+ 
+     public static native void glCompileShader(int shader); /*
+@@ -365,6 +388,10 @@
+     */
+ 
+     public static native void glDeleteFramebuffer(int framebuffer); /*
++        #ifdef __ANDROID__
++        GLuint b = framebuffer;
++        glDeleteFramebuffers(1, &b);
++        #else
+         if(glDeleteFramebuffers){
+             GLuint b = framebuffer;
+             glDeleteFramebuffers(1, &b);
+@@ -373,6 +400,7 @@
+ 
+         GLuint b = framebuffer;
+         glDeleteFramebuffersEXT(1, &b);
++        #endif
+     */
+ 
+     public static native void glDeleteProgram(int program); /*
+@@ -380,7 +408,11 @@
+     */
+ 
+     public static native void glDeleteRenderbuffer(int renderbuffer); /*
++        #ifdef __ANDROID__
+         GLuint b = renderbuffer;
++        glDeleteRenderbuffers(1, &b);
++        #else
++        GLuint b = renderbuffer;
+ 
+         if(glDeleteRenderbuffers){
+             glDeleteRenderbuffers(1, &b);
+@@ -388,6 +420,7 @@
+         }
+ 
+         glDeleteRenderbuffersEXT(1, &b);
++        #endif
+     */
+ 
+     public static native void glDeleteShader(int shader); /*
+@@ -501,12 +534,16 @@
+     */
+ 
+     public static native void glGetFramebufferAttachmentParameteriv(int target, int attachment, int pname, IntBuffer params); /*
++        #ifdef __ANDROID__
++        glGetFramebufferAttachmentParameteriv(target, attachment, pname, params);
++        #else
+         if(glGetFramebufferAttachmentParameteriv){
+             glGetFramebufferAttachmentParameteriv(target, attachment, pname, params);
+             return;
+         }
+ 
+         glGetFramebufferAttachmentParameterivEXT(target, attachment, pname, params);
++        #endif
+     */
+ 
+     public static native void glGetProgramiv(int program, int pname, IntBuffer params); /*
+@@ -521,12 +558,16 @@
+     */
+ 
+     public static native void glGetRenderbufferParameteriv(int target, int pname, IntBuffer params); /*
++        #ifdef __ANDROID__
++        glGetRenderbufferParameteriv(target, pname, params);
++        #else
+         if(glGetRenderbufferParameteriv){
+             glGetRenderbufferParameteriv(target, pname, params);
+             return;
+         }
+ 
+         glGetRenderbufferParameterivEXT(target, pname, params);
++        #endif
+     */
+ 
+     public static native void glGetShaderiv(int shader, int pname, IntBuffer params); /*
+@@ -581,11 +622,15 @@
+     */
+ 
+     public static native boolean glIsFramebuffer(int framebuffer); /*
++        #ifdef __ANDROID__
++        return glIsFramebuffer(framebuffer);
++        #else
+         if(glIsFramebuffer){
+             return glIsFramebuffer(framebuffer);
+         }
+ 
+         return glIsFramebufferEXT(framebuffer);
++        #endif
+     */
+ 
+     public static native boolean glIsProgram(int program); /*
+@@ -593,11 +638,15 @@
+     */
+ 
+     public static native boolean glIsRenderbuffer(int renderbuffer); /*
++        #ifdef __ANDROID__
++        return glIsRenderbuffer(renderbuffer);
++        #else
+         if(glIsRenderbuffer){
+             return glIsRenderbuffer(renderbuffer);
+         }
+ 
+         return glIsRenderbufferEXT(renderbuffer);
++        #endif
+     */
+ 
+     public static native boolean glIsShader(int shader); /*
+@@ -617,12 +666,16 @@
+     */
+ 
+     public static native void glRenderbufferStorage(int target, int internalformat, int width, int height); /*
++        #ifdef __ANDROID__
++        glRenderbufferStorage(target, internalformat, width, height);
++        #else
+         if(glRenderbufferStorage){
+             glRenderbufferStorage(target, internalformat, width, height);
+             return;
+         }
+ 
+         glRenderbufferStorageEXT(target, internalformat, width, height);
++        #endif
+     */
+ 
+     public static native void glSampleCoverage(float value, boolean invert); /*
+@@ -1150,7 +1203,11 @@
+     */
+ 
+     public static native void glProgramParameteri(int program, int pname, int value); /*
++        #ifdef __ANDROID__
++        env->ThrowNew(UOEClass, "glProgramParameteri is unsupported on Android GLES.");
++        #else
+         glProgramParameteri(program, pname, value);
++        #endif
+     */
+ 
+     public static native void glInvalidateFramebuffer(int target, int numAttachments, IntBuffer attachments); /*
+@@ -411,60 +411,84 @@
+     */
+ 
+     public static native void glFramebufferRenderbuffer(int target, int attachment, int renderbuffertarget, int renderbuffer); /*
++        #ifdef __ANDROID__
++        glFramebufferRenderbuffer(target, attachment, renderbuffertarget, renderbuffer);
++        #else
+         if(glFramebufferRenderbuffer){
+             glFramebufferRenderbuffer(target, attachment, renderbuffertarget, renderbuffer);
+             return;
+         }
+ 
+         glFramebufferRenderbufferEXT(target, attachment, renderbuffertarget, renderbuffer);
++        #endif
+     */
+ 
+     public static native void glFramebufferTexture2D(int target, int attachment, int textarget, int texture, int level); /*
++        #ifdef __ANDROID__
++        glFramebufferTexture2D(target, attachment, textarget, texture, level);
++        #else
+         if(glFramebufferTexture2D){
+             glFramebufferTexture2D(target, attachment, textarget, texture, level);
+             return;
+         }
+ 
+         glFramebufferTexture2DEXT(target, attachment, textarget, texture, level);
++        #endif
+     */
+ 
+     public static native int glGenBuffer(); /*
+         GLuint result;
+         glGenBuffers(1, &result);
+         return result;
+     */
+ 
+     public static native void glGenerateMipmap(int target); /*
++        #ifdef __ANDROID__
++        glGenerateMipmap(target);
++        #else
+         if(glGenerateMipmap){
+             glGenerateMipmap(target);
+             return;
+         }
+ 
+         glGenerateMipmapEXT(target);
++        #endif
+     */
+ 
+     public static native int glGenFramebuffer(); /*
++        #ifdef __ANDROID__
++        GLuint result;
++        glGenFramebuffers(1, &result);
++        return result;
++        #else
+         if(glGenFramebuffers){
+             GLuint result;
+             glGenFramebuffers(1, &result);
+             return result;
+         }
+ 
+         GLuint result;
+         glGenFramebuffersEXT(1, &result);
+         return result;
++        #endif
+     */
+ 
+     public static native int glGenRenderbuffer(); /*
++        #ifdef __ANDROID__
++        GLuint result;
++        glGenRenderbuffers(1, &result);
++        return result;
++        #else
+         if(glGenRenderbuffers){
+             GLuint result;
+             glGenRenderbuffers(1, &result);
+             return result;
+         }
+ 
+         GLuint result;
+         glGenRenderbuffersEXT(1, &result);
+         return result;
++        #endif
+     */
+ 
+     public static native String glGetActiveAttrib(int program, int index, Object size, Object type); /*
