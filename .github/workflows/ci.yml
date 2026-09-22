@@ -29,6 +29,17 @@ jobs:
         with:
           gradle-version: wrapper
 
+      - name: Build Android-JVM framework visibility probe
+        shell: bash
+        run: bash scripts/android-jvm/android-framework-visibility-probe.sh
+
+      - name: Upload Android-JVM framework visibility probe
+        uses: actions/upload-artifact@v7
+        with:
+          name: Android-JVM-framework-visibility-probe-${{ github.sha }}
+          path: ci-artifacts/android-jvm-framework-visibility-probe
+          if-no-files-found: error
+
       - name: Clone and pin Arc
         shell: bash
         run: |
