@@ -25,6 +25,24 @@ if [ -d "$ARC_DIR/.git" ]; then
     [ "$ARC_HEAD" = "$ARC_EXPECTED" ] || { echo "::error::Arc SHA mismatch: $ARC_HEAD"; exit 1; }
 fi
 
+SDL_NATIVE_JAR="$ARC_DIR/backends/backend-sdl/libs/sdl-arc-natives-arm64-v8a.jar"
+[ -d "$ARC_DIR/.git" ] || {
+    echo "::error::Pinned Arc checkout is required for Android-JVM SDL packaging verification: $ARC_DIR"
+    exit 1
+}
+[ -f "$SDL_NATIVE_JAR" ] || {
+    echo "::error::Expected pinned Android ARM64 SDL native package is missing: $SDL_NATIVE_JAR"
+    exit 1
+}
+jar tf "$SDL_NATIVE_JAR" | grep -Fxq "libsdl-arc.so" || {
+    echo "::error::Pinned Android ARM64 SDL native package does not contain libsdl-arc.so: $SDL_NATIVE_JAR"
+    exit 1
+}
+unzip -p "$SDL_NATIVE_JAR" "libsdl-arc.so" > "$OUT/source-libsdl-arc.so"
+test -s "$OUT/source-libsdl-arc.so"
+SDL_SOURCE_SHA="$(sha256sum "$OUT/source-libsdl-arc.so" | awk '{print $1}')"
+echo "Pinned Android ARM64 SDL package libsdl-arc.so SHA256: $SDL_SOURCE_SHA" | tee "$OUT/sdl-source-sha256.txt"
+
 sha256sum "$JAR" | tee "$OUT/jar-sha256.txt"
 stat -c 'size=%s' "$JAR" | tee "$OUT/jar-size.txt"
 
@@ -44,8 +62,66 @@ if unzip -Z1 "$JAR" | grep -Eq '(^|/)libarcarm64\.so$'; then
 fi
 echo "Desktop libarcarm64.so: absent"
 
+echo "== Packaged Android SDL resource entries =="
+unzip -Z1 "$JAR" | grep -E "(^|/)(arm64-v8a|armeabi-v7a|x86|x86_64)/libsdl-arc\.so$" | sort -u | tee "$OUT/sdl-resource-entries.txt" || true
+grep -Fxq "arm64-v8a/libsdl-arc.so" "$OUT/sdl-resource-entries.txt" || {
+    echo "::error::Expected Android ARM64 resource arm64-v8a/libsdl-arc.so is missing"
+    exit 1
+}
+if grep -Evx "arm64-v8a/libsdl-arc\.so" "$OUT/sdl-resource-entries.txt" | grep -q .; then
+    echo "::error::Android-JVM artifact contains a non-ARM64 SDL native entry"
+    exit 1
+fi
+if unzip -Z1 "$JAR" | grep -Eq "(^|/)(libsdl-arcarm64\.so|libSDL2-2\.0\.so\.0)$"; then
+    echo "::error::Desktop Linux SDL native library was packaged into the Android-JVM artifact"
+    exit 1
+fi
+echo "Desktop SDL native variants: absent"
+
+echo "== Packaged Android SDL Java glue =="
+expected_sdl_java_classes=(
+    "org/libsdl/app/SDLActivity.class"
+    "org/libsdl/app/SDLInputConnection.class"
+    "org/libsdl/app/SDLAudioManager.class"
+    "org/libsdl/app/SDLControllerManager.class"
+    "org/libsdl/app/SDLJoystickHandler.class"
+    "org/libsdl/app/SDLJoystickHandler_API16.class"
+    "org/libsdl/app/SDLJoystickHandler_API19.class"
+    "org/libsdl/app/SDLHapticHandler.class"
+    "org/libsdl/app/SDLHapticHandler_API26.class"
+)
+mapfile -t packaged_sdl_java_classes < <(
+    jar tf "$JAR" |
+        grep -E '^org/libsdl/app/[^/]+\.class$' |
+        LC_ALL=C sort
+)
+printf '%s\n' "${packaged_sdl_java_classes[@]}" | tee "$OUT/sdl-java-glue-entries.txt"
+diff -u \
+    <(printf '%s\n' "${expected_sdl_java_classes[@]}" | LC_ALL=C sort) \
+    <(printf '%s\n' "${packaged_sdl_java_classes[@]}" | LC_ALL=C sort) || {
+    echo "::error::Android-JVM JAR does not contain exactly the required SDL Android Java glue class set"
+    exit 1
+}
+for system_prefix in "android/" "javax/" "java/"; do
+    if unzip -Z1 "$JAR" | grep -Eq "^${system_prefix}"; then
+        echo "::error::Android system classes must not be bundled: ${system_prefix}"
+        exit 1
+    fi
+done
+echo "SDL Android Java glue: exact nine-class set present; Android/JDK system classes absent"
+
 unzip -p "$JAR" 'arm64-v8a/libarc.so' > "$OUT/libarc.so"
 test -s "$OUT/libarc.so"
+
+unzip -p "$JAR" "arm64-v8a/libsdl-arc.so" > "$OUT/libsdl-arc.so"
+test -s "$OUT/libsdl-arc.so"
+PACKAGED_SDL_SHA="$(sha256sum "$OUT/libsdl-arc.so" | awk '{print $1}')"
+echo "Packaged libsdl-arc.so SHA256: $PACKAGED_SDL_SHA" | tee "$OUT/sdl-packaged-sha256.txt"
+[ "$PACKAGED_SDL_SHA" = "$SDL_SOURCE_SHA" ] || {
+    echo "::error::Packaged libsdl-arc.so does not match the pinned Arc Android ARM64 SDL native package"
+    exit 1
+}
+echo "Packaged libsdl-arc.so matches the pinned Arc Android ARM64 SDL package"
 
 READELF="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
 if [ ! -x "$READELF" ]; then
@@ -102,6 +178,9 @@ JAR: $JAR
 JAR SHA256: $(cut -d' ' -f1 "$OUT/jar-sha256.txt")
 Packaged resource: arm64-v8a/libarc.so
 libarc.so SHA256: $PACKAGED_SHA
+libsdl-arc.so SHA256: $PACKAGED_SDL_SHA
+Pinned Arc Android ARM64 SDL package: $SDL_NATIVE_JAR
+Pinned Arc Android ARM64 SDL package libsdl-arc.so SHA256: $SDL_SOURCE_SHA
 Pinned Arc SHA: $ARC_EXPECTED
 Pinned Arc natives-android arm64-v8a SHA256: $PINNED_ARC_ANDROID_ARM64_SHA256
 Build ID: $BUILD_ID

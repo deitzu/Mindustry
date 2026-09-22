@@ -187,7 +187,7 @@ jar tf "$OUT_JAR" | grep -Fxq 'arc/util/SharedLibraryLoader.class'
 jar tf "$OUT_JAR" | grep -Fxq 'androidjvm/probe/AndroidJvmArcNativeLoadProbe.class'
 jar tf "$OUT_JAR" | grep -Fxq 'arm64-v8a/libarc.so'
 unzip -p "$OUT_JAR" 'arm64-v8a/libarc.so' | sha256sum | grep -Fxq "$EXPECTED_ARC_SHA256  -"
-unzip -p "$OUT_JAR" 'META-INF/MANIFEST.MF' | tr -d '\\r' | grep -Fxq 'Main-Class: androidjvm.probe.AndroidJvmArcNativeLoadProbe'
+unzip -p "$OUT_JAR" 'META-INF/MANIFEST.MF' | tr -d '\r' | grep -Fxq 'Main-Class: androidjvm.probe.AndroidJvmArcNativeLoadProbe'
 sha256sum "$OUT_JAR" | tee "$OUT_DIR/probe-jar-sha256.txt"
 jar tf "$OUT_JAR" | grep -E '^(arc/util/SharedLibraryLoader.class|androidjvm/probe/AndroidJvmArcNativeLoadProbe.class|arm64-v8a/libarc.so)$' | sort | tee "$OUT_DIR/probe-entries.txt"
 

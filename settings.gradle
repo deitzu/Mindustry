@@ -28,6 +28,57 @@ if(hasProperty("localSteamworks") || localProperties.getOrDefault("localSteamwor
     includeBuild("../steamworks4j")
 }
 
+
+/*
+ * TASK-02D VERIFY-02 TEMPORARY CI DIAGNOSTIC.
+ * Pins and applies the deterministic Arc loader patch for CI only.
+ * Remove this block after verification.
+ */
+if(hasProperty("androidJvm") && new File(settingsDir.parentFile, "Arc/.git").exists()){
+    def task02dExpectedArcSha = "8eb00ffff0126d0576c67df46f99b8f6bccd96fe"
+    def task02dArcDir = new File(settingsDir.parentFile, "Arc")
+    def task02dPatch = new File(settingsDir, "ci/android-jvm/task02d-arc-shared-library-loader.patch")
+
+    def task02dRun = { List<String> command ->
+        def process = new ProcessBuilder(command)
+            .directory(settingsDir)
+            .redirectErrorStream(true)
+            .start()
+        def output = process.inputStream.text
+        def exitCode = process.waitFor()
+        println "TASK-02D VERIFY-02 CMD: " + command.join(" ")
+        if(!output.isEmpty()) println output.trim()
+        if(exitCode != 0){
+            throw new GradleException("TASK-02D VERIFY-02 command failed ($exitCode): " + command.join(" "))
+        }
+        return output.trim()
+    }
+
+    def task02dArcSha = task02dRun(["git", "-C", task02dArcDir.absolutePath, "rev-parse", "HEAD"])
+    if(task02dArcSha != task02dExpectedArcSha){
+        task02dRun(["git", "-C", task02dArcDir.absolutePath, "fetch", "--no-tags", "--depth=1", "origin", task02dExpectedArcSha])
+        task02dRun(["git", "-C", task02dArcDir.absolutePath, "checkout", "--detach", task02dExpectedArcSha])
+        task02dArcSha = task02dRun(["git", "-C", task02dArcDir.absolutePath, "rev-parse", "HEAD"])
+    }
+
+    if(task02dArcSha != task02dExpectedArcSha){
+        throw new GradleException("TASK-02D VERIFY-02 Arc SHA mismatch: " + task02dArcSha)
+    }
+
+    if(!task02dPatch.isFile()){
+        throw new GradleException("TASK-02D VERIFY-02 patch file missing: " + task02dPatch)
+    }
+
+    def task02dChanged = task02dRun(["git", "-C", task02dArcDir.absolutePath, "diff", "--name-only"])
+    if(!task02dChanged.readLines().contains("arc-core/src/arc/util/SharedLibraryLoader.java")){
+        task02dRun(["git", "-C", task02dArcDir.absolutePath, "apply", "--check", task02dPatch.absolutePath])
+        task02dRun(["git", "-C", task02dArcDir.absolutePath, "apply", task02dPatch.absolutePath])
+        task02dRun(["git", "-C", task02dArcDir.absolutePath, "diff", "--check"])
+    }
+
+    println "TASK-02D VERIFY-02 Arc checkout/patched overlay ready: " + task02dRun(["git", "-C", task02dArcDir.absolutePath, "rev-parse", "HEAD"])
+}
+
 if(!hasProperty("noLocalArc")){
     if(new File(rootDir.parent, 'Arc').exists()){
         println("Compiling with localArc")

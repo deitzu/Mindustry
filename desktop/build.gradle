@@ -38,6 +38,79 @@ tasks.register('run', JavaExec){
     }
 }
 
+def androidSdlJavaGlueTask = null
+def androidSdlJavaOutput = null
+def androidSdlGlueClasses = []
+
+if(project.hasProperty("androidJvm")){
+    def androidSdlRoot = new File(rootDir.parent, "SDL2-2.32.8")
+    def androidSdlJavaRoot = new File(androidSdlRoot, "android-project/app/src/main/java")
+    androidSdlJavaOutput = file("$buildDir/generated/android-jvm/sdl-java-glue/classes")
+    def androidSdkRoot = System.getenv("ANDROID_SDK_ROOT") ?: System.getenv("ANDROID_HOME")
+    def androidApiLevel = System.getenv("ANDROID_API_LEVEL") ?: "36"
+    def androidJar = androidSdkRoot == null ? null : new File(androidSdkRoot, "platforms/android-$androidApiLevel/android.jar")
+
+    def androidSdlGlueSources = [
+        "org/libsdl/app/SDLActivity.java",
+        "org/libsdl/app/SDLAudioManager.java",
+        "org/libsdl/app/SDLControllerManager.java"
+    ]
+    androidSdlGlueClasses = [
+        "org/libsdl/app/SDLActivity.class",
+        "org/libsdl/app/SDLInputConnection.class",
+        "org/libsdl/app/SDLAudioManager.class",
+        "org/libsdl/app/SDLControllerManager.class",
+        "org/libsdl/app/SDLJoystickHandler.class",
+        "org/libsdl/app/SDLJoystickHandler_API16.class",
+        "org/libsdl/app/SDLJoystickHandler_API19.class",
+        "org/libsdl/app/SDLHapticHandler.class",
+        "org/libsdl/app/SDLHapticHandler_API26.class"
+    ]
+
+    androidSdlJavaGlueTask = tasks.register("compileAndroidJvmSdlJavaGlue", JavaCompile){
+        source androidSdlGlueSources.collect{ new File(androidSdlJavaRoot, it) }
+        destinationDirectory.set(androidSdlJavaOutput)
+        classpath = files(androidJar)
+        sourceCompatibility = "8"
+        targetCompatibility = "8"
+        options.encoding = "UTF-8"
+        options.compilerArgs += ["-proc:none"]
+        options.sourcepath = files(androidSdlJavaRoot)
+
+        doFirst{
+            if(!androidSdlRoot.isDirectory()){
+                throw new GradleException("SDL source checkout is missing: " + androidSdlRoot)
+            }
+            if(androidSdkRoot == null || !androidJar.isFile()){
+                throw new GradleException("Android API " + androidApiLevel + " android.jar is missing; set ANDROID_SDK_ROOT or ANDROID_HOME")
+            }
+
+            def sdlVersionHeader = new File(androidSdlRoot, "include/SDL_version.h")
+            if(!sdlVersionHeader.isFile()){
+                throw new GradleException("SDL version header is missing: " + sdlVersionHeader)
+            }
+            def sdlVersionText = sdlVersionHeader.text
+            def sdlMajorMatch = (sdlVersionText =~ /(?m)^#define SDL_MAJOR_VERSION\s+(\d+)/)
+            def sdlMinorMatch = (sdlVersionText =~ /(?m)^#define SDL_MINOR_VERSION\s+(\d+)/)
+            def sdlPatchMatch = (sdlVersionText =~ /(?m)^#define SDL_PATCHLEVEL\s+(\d+)/)
+            if(!sdlMajorMatch.find() || !sdlMinorMatch.find() || !sdlPatchMatch.find()){
+                throw new GradleException("SDL version macros are missing from: " + sdlVersionHeader)
+            }
+            def sdlVersion = sdlMajorMatch.group(1) + "." + sdlMinorMatch.group(1) + "." + sdlPatchMatch.group(1)
+            if(sdlVersion != "2.32.8"){
+                throw new GradleException("Unexpected SDL version: expected 2.32.8, got " + sdlVersion)
+            }
+
+            androidSdlGlueSources.each{ sourcePath ->
+                File sourceFile = new File(androidSdlJavaRoot, sourcePath)
+                if(!sourceFile.isFile()){
+                    throw new GradleException("Required SDL Android Java source is missing: " + sourceFile)
+                }
+            }
+        }
+    }
+}
+
 tasks.register('dist', Jar){
     dependsOn configurations.runtimeClasspath
     dependsOn ":desktop:processResources"
@@ -58,8 +131,31 @@ tasks.register('dist', Jar){
     exclude("**hs_err**.log")
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
-    if(project.hasProperty("androidJvm")){
+    if(androidSdlJavaGlueTask != null){
+        dependsOn androidSdlJavaGlueTask
+        from(androidSdlJavaOutput){
+            androidSdlGlueClasses.each{ include it }
+        }
+
         exclude("armeabi-v7a/libarc.so", "x86/libarc.so", "x86_64/libarc.so")
+
+        def androidSdlNativeJar = new File(rootDir.parent, "Arc/backends/backend-sdl/libs/sdl-arc-natives-arm64-v8a.jar")
+        doFirst{
+            if(!androidSdlNativeJar.isFile()){
+                throw new GradleException("Android-JVM SDL native package is missing: " + androidSdlNativeJar)
+            }
+
+            def entries = zipTree(androidSdlNativeJar).matching{ include "libsdl-arc.so" }.files
+            if(entries.size() != 1){
+                throw new GradleException("Android-JVM SDL native package does not contain exactly one libsdl-arc.so: " + androidSdlNativeJar)
+            }
+        }
+
+        into("arm64-v8a"){
+            from{
+                zipTree(androidSdlNativeJar).matching{ include "libsdl-arc.so" }
+            }
+        }
     }
 
     //don't include steam shared libraries unless necessary
@@ -76,6 +172,7 @@ tasks.register('dist', Jar){
         attributes 'Multi-Release': 'true'
     }
 }
+
 
 if(!project.ext.hasSprites() && System.getenv("JITPACK") != "true"){
     println "Scheduling sprite packing."
